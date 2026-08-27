@@ -4,6 +4,7 @@ export { express };
 export * as z from "zod";
 import cors from "cors";
 import { customAlphabet } from "nanoid";
+export type { JsonValue, JsonObject, JsonArray } from "@zenstackhq/orm";
 export { cors };
 export { default as bcrypt } from "bcrypt";
 export { default as jwt } from "jsonwebtoken";
@@ -12,9 +13,6 @@ export { default as axios } from "axios";
 export function sleep(ms: number): Promise<void> {
   return new Promise<void>((res) => setTimeout(res, ms));
 }
-// Re-exported from the ORM so the two definitions can never drift apart.
-export type { JsonArray, JsonObject, JsonValue } from "@zenstackhq/orm";
-
 function genCharArray(st: string, ed: string): string[] {
   const res = [];
   const endChar = ed.charCodeAt(0);

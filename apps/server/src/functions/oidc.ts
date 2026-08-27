@@ -4,7 +4,6 @@ import { env } from "../env.js";
 import { type OidcSettings } from "../env-schema.js";
 import { axios, type JsonValue, renderIf, z } from "../lib.js";
 import { t } from "../trpc.js";
-import { db } from "../db.js";
 import { Role } from "../zenstack/models.js";
 
 interface OIDCTokenResponse {
