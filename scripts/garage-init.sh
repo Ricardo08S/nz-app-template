@@ -50,6 +50,22 @@ garage bucket allow --read --write --owner "$BUCKET" --key "$KEY_NAME"
 echo "==> exposing the bucket over the web endpoint"
 garage bucket website --allow "$BUCKET"
 
+# The `garage` CLI has no `bucket cors` subcommand (checked v2.3.0) - CORS is
+# S3-API-only, so this shells out via a throwaway aws-cli container instead.
+# Without it, presigned PUT from a real browser fails the preflight OPTIONS
+# with a CORS error - invisible in Node-side tests (fetch/curl don't enforce
+# CORS), only shows up when someone actually clicks "upload" in the browser.
+echo "==> setting bucket CORS so browsers can PUT directly (presigned uploads)"
+KEY_INFO="$(garage key info "$KEY_NAME" --show-secret)"
+ACCESS_KEY="$(echo "$KEY_INFO" | grep 'Key ID:' | awk '{print $3}')"
+SECRET_KEY="$(echo "$KEY_INFO" | grep 'Secret key:' | awk '{print $3}')"
+docker run --rm --network "container:${CONTAINER}" \
+  -e AWS_ACCESS_KEY_ID="$ACCESS_KEY" \
+  -e AWS_SECRET_ACCESS_KEY="$SECRET_KEY" \
+  amazon/aws-cli --endpoint-url http://localhost:3900 --region us-east-1 \
+  s3api put-bucket-cors --bucket "$BUCKET" --cors-configuration \
+  '{"CORSRules":[{"AllowedOrigins":["*"],"AllowedMethods":["GET","PUT","HEAD"],"AllowedHeaders":["*"]}]}'
+
 echo
 echo "==> credentials for apps/server/.env"
 garage key info "$KEY_NAME" --show-secret
