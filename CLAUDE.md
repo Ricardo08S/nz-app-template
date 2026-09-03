@@ -83,6 +83,8 @@ JWT-based dual-token (access + refresh). Access token sent as `Authorization` he
 
 OIDC login is **opt-in**: `env.oidc` (`apps/server/src/env-schema.ts`) is `OidcSettings | null`, non-null only when all four `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`/`OIDC_REDIRECT_URI` env vars are set. `requireOidcSettings()` in `functions/oidc.ts` throws `PRECONDITION_FAILED` if an OIDC procedure is called while unconfigured — the app boots and runs fine with OIDC completely unset.
 
+`tadmin` (`src/trpc.ts`) is the server-side role gate — built on `tuser`, throws `forbiddenError` unless `ctx.user.role === "ADMIN"`. Use it for any admin-only procedure. The web `(admin)` route group's layout guard (`user().role === "ADMIN"`) is UI-only and does not protect the API — a procedure not wrapped in `tadmin` is reachable by any authenticated user regardless of what the UI hides.
+
 ### Logging
 
 `src/log.ts` — `createLog()` returns a `tslog` logger; if `LOKI_URL` is set it also ships every line to Loki. **Never pass secrets in a log payload** (tokens, passwords, full OIDC userinfo) — logs reach stdout/`docker logs` always, and Loki whenever it's configured, both wider audiences than the database. `context.ts` already masks `Authorization`/`Cookie` request headers before logging them; that pattern doesn't extend automatically to values you pass yourself, so check what you're logging by hand.
@@ -94,6 +96,8 @@ Presigned S3 URLs: client calls `getUploadUrl` tRPC → gets presigned PUT URL �
 `AWS_S3_ENDPOINT` signs uploads; `PUBLIC_S3_ENDPOINT` serves reads. They are different hosts and must not be swapped — a signature is bound to the host it was made for.
 
 The S3 client sets `requestChecksumCalculation: "WHEN_REQUIRED"`. Without it the SDK signs a CRC32 it cannot compute ahead of the upload, and S3-compatible servers reject the PUT with `InvalidDigest`.
+
+The browser PUTs directly to Garage, so the bucket needs CORS (`PutBucketCors`) or the preflight `OPTIONS` fails. `scripts/garage-init.sh` sets this now (via a throwaway `amazon/aws-cli` container, since Garage's own CLI has no CORS subcommand) — a bucket bootstrapped before this was added needs the script re-run.
 
 ## Deployment
 
@@ -120,6 +124,11 @@ Full step-by-step VPS setup is in `README.md`; this is the code map.
   outright if the last deploy was a breaking migration — the old slot's code no longer matches the
   schema, so a pointer flip would just crash it. The message it prints points at the DB backup
   instead.
+- **`deploy/local-build-deploy.sh`** — builds `server`/`web` images locally and tags them, then
+  calls `deploy.sh` with those tags. `deploy.sh` never checks where an image ref came from, so this
+  needs no changes to `deploy.sh`/`docker-compose.app.yml`/`deploy.yml`. Use this to skip GHCR
+  entirely (no registry, no `docker login`) — `build.yml`/GHCR stay in the repo as the default CI
+  path, untouched.
 - **`scripts/scan-migrations.ts`** — classifies a `migration.sql` file as breaking (`DROP TABLE`,
   `DROP COLUMN`, `ALTER COLUMN ... TYPE`, `RENAME`, `ADD COLUMN ... NOT NULL` without a `DEFAULT`)
   or safe, by matching real DDL keywords (not Prisma's own `-- DropTable`-style comments, which
