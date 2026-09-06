@@ -1,5 +1,18 @@
 # nz-app-template
 
+> **Template notice:** "nz-app-template" and `$APP_NAME` throughout this repo are placeholders.
+> Before using this for a real project, replace them with your actual project's name — grep
+> for `nz-app-template` and check every match (package names, `deploy/env/*.env`, example
+> domains, bucket names).
+
+## Authorization
+
+RBAC lives in `apps/server/src/zenstack/core.zmodel`: a `Role` enum (`ADMIN`/`USER`), a
+`RolePermission` model (custom permission strings per role), and `@@allow`/`@@deny` policies
+enforced by ZenStack at the data layer — not just hidden in the UI. `apps/server/src/zenstack/app.zmodel`
+is empty; add your own models there and gate them with `auth().role`/`auth().permissions` the
+same way `core.zmodel` already gates `User`. See `CLAUDE.md`'s Architecture section for details.
+
 ## Deployment (VPS)
 
 Production runs blue-green: two identical `server`+`web` slots behind a Caddy reverse proxy, only
@@ -157,6 +170,16 @@ Prerequisites: `sops` and `age` installed, and `SOPS_AGE_KEY_FILE` pointing at y
 
 ### Everyday use
 
+Two equivalent ways to edit a secrets file — pick whichever fits how you work.
+
+**Option A — convenience scripts** (from `apps/server`):
+```bash
+pnpm edit:server-secrets   # sops secrets/production/server.sops.yaml
+pnpm edit:web-secrets      # sops secrets/production/web.sops.yaml
+pnpm edit:infra-secrets    # sops secrets/production/infra.sops.yaml
+```
+
+**Option B — the real `sops` command directly** (from repo root), same effect:
 ```bash
 sops secrets/production/server.sops.yaml   # opens $EDITOR with plaintext, re-encrypts on save
 sops -d secrets/production/server.sops.yaml

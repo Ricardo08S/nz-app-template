@@ -18,6 +18,7 @@ describe("config", () => {
         PUBLIC_S3_ENDPOINT: "https://files.example.com",
         PUBLIC_ENVIRONMENT: "production",
         PUBLIC_ENABLE_LOGGING: "true",
+        PUBLIC_LOCALE: "id-ID",
       },
     });
 
@@ -28,6 +29,7 @@ describe("config", () => {
       PUBLIC_S3_ENDPOINT: "https://files.example.com",
       PUBLIC_ENVIRONMENT: "production",
       PUBLIC_ENABLE_LOGGING: "true",
+      PUBLIC_LOCALE: "id-ID",
     });
   });
 

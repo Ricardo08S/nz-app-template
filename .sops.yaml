@@ -1,19 +1,16 @@
-# Which secrets/**.sops.yaml files decrypt for which recipients.
-# Domain and other non-secret config live in deploy/env/*.env instead
-# (plaintext, see §4.4).
-#
-# [\\/] handles both path separators. Root cause of an earlier bug: on this
-# Windows/Git-Bash setup, sops matches path_regex against a backslash-
-# separated path (Windows-native), so a forward-slash-only pattern like
-# "secrets/production/..." silently matched nothing — verified by isolating
-# it down to the literal separator character (bare "production", no slash,
-# matched; "secrets/production", with a forward slash, did not). A character
-# class covering both separators works on Windows and stays correct on
-# Linux (CI/VPS), where paths are forward-slash-only anyway.
+# Which secrets/** files are encrypted for which age recipients.
+# Replace the placeholder keys below with real ones - see README's "Secrets
+# (SOPS + age)" section for how to generate and register them.
 creation_rules:
-  - path_regex: secrets[\\/]production[\\/].*\.sops\.yaml$
+  - path_regex: secrets[\/]production[\/].*\.sops\.yaml$
     key_groups:
       - age:
-          - age1djs9hpxq2wc2dc4sphmx0sudqewcxm47xdwcl40f3292jsqxdfjsxgw3v2 # developer (laptop)
-          - age1enhtyctxeqtlj4xnuqcusr3a0s4h0nufx3dvvqyq5zpfm7wzgetqsvz340 # CI (GitHub Actions)
-          - age1ay4xxvl6c5pnrcj38ujndxkrzwhyy4cvr45ph02yay6r8eqxcc9su62qj5 # production host (VPS)
+          - age1REPLACE_WITH_DEVELOPER_PUBLIC_KEY
+          - age1REPLACE_WITH_CI_PUBLIC_KEY
+          - age1REPLACE_WITH_PRODUCTION_HOST_PUBLIC_KEY
+  - path_regex: secrets[\/]development[\/].*\.sops\.yaml$
+    key_groups:
+      - age:
+          - age1REPLACE_WITH_DEVELOPER_PUBLIC_KEY
+          - age1REPLACE_WITH_CI_PUBLIC_KEY
+          - age1REPLACE_WITH_DEVELOPMENT_HOST_PUBLIC_KEY

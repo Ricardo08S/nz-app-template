@@ -2,11 +2,11 @@ import { ZenStackClient } from "@zenstackhq/orm";
 import { schema } from "./zenstack/schema";
 import { PostgresDialect } from "kysely";
 import { Pool } from "pg";
-import { env, prod } from "./env";
+import { env } from "./env";
 import { PolicyPlugin } from "@zenstackhq/plugin-policy";
 
 export const db = new ZenStackClient(schema, {
-  log: !prod() ? ["query", "error"] : [],
+  log: !env.VERBOSE ? ["query", "error"] : [],
   dialect: new PostgresDialect({
     pool: new Pool({
       connectionString: env.DATABASE_URL,

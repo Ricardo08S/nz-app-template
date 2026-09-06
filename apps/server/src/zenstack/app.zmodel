@@ -1,14 +1,6 @@
 import './core'
 
-model Post with Base {
-  userId   String
-  User     User    @relation(fields: [userId], references: [id])
-
-  content  String
-  imageKey String?
-  Image    File?   @relation(fields: [imageKey], references: [key])
-
-  @@allow('read', true)
-  @@allow('create,update', auth().id == userId && (Image == null || auth().id == Image.userId))
-  @@allow('delete', auth().id == userId)
-}
+// App-specific models go here. core.zmodel already provides User/File/RefreshToken plus
+// the Role + RolePermission based RBAC (see core.zmodel's AuthInfo/Role/RolePermission) -
+// use `auth().role` and RolePermission-backed `auth().permissions` in `@@allow`/`@@deny`
+// policies the same way, not a client-side-only check.

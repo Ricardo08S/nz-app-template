@@ -1,0 +1,151 @@
+// Oversimplified Moodle-style model. Reference only, not imported by schema.zmodel.
+
+type ID {
+  id String @id @default(nanoid())
+}
+
+type Timestamps {
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+type Base with ID, Timestamps {
+}
+
+type AuthInfo {
+  id   String
+  role Role
+
+  @@auth
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum CourseRole {
+  TEACHER
+  STUDENT
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+  ESSAY
+}
+
+model User with Base {
+  name        String
+  email       String       @unique
+  role        Role
+
+  Enrollment  Enrollment[]
+  Submission  Submission[]
+  QuizAttempt QuizAttempt[]
+
+  @@allow('read', true)
+  @@allow('all', auth().id == id)
+}
+
+model Course with Base {
+  code        String       @unique
+  name        String
+  description String?
+
+  Enrollment  Enrollment[]
+  Assignment  Assignment[]
+  Quiz        Quiz[]
+
+  @@allow('read', true)
+  @@allow('all', auth().role == ADMIN)
+}
+
+model Enrollment with Base {
+  userId   String
+  User     User       @relation(fields: [userId], references: [id])
+
+  courseId String
+  Course   Course     @relation(fields: [courseId], references: [id])
+
+  role     CourseRole
+
+  @@unique([userId, courseId])
+
+  @@allow('read', auth().id == userId)
+  @@allow('all', auth().role == ADMIN)
+}
+
+model Assignment with Base {
+  courseId    String
+  Course      Course       @relation(fields: [courseId], references: [id])
+
+  title       String
+  description String?
+  dueAt       DateTime?
+
+  Submission  Submission[]
+
+  @@allow('read', true)
+  @@allow('all', auth().role == ADMIN)
+}
+
+model Submission with Base {
+  assignmentId String
+  Assignment   Assignment @relation(fields: [assignmentId], references: [id])
+
+  userId       String
+  User         User       @relation(fields: [userId], references: [id])
+
+  content      String?
+  grade        Int?
+
+  @@unique([assignmentId, userId])
+
+  @@allow('read', auth().id == userId)
+  @@allow('create,update', auth().id == userId && grade == null)
+  @@allow('all', auth().role == ADMIN)
+}
+
+model Quiz with Base {
+  courseId    String
+  Course      Course        @relation(fields: [courseId], references: [id])
+
+  title       String
+
+  Question    Question[]
+  QuizAttempt QuizAttempt[]
+
+  @@allow('read', true)
+  @@allow('all', auth().role == ADMIN)
+}
+
+model Question with Base {
+  quizId  String
+  Quiz    Quiz         @relation(fields: [quizId], references: [id])
+
+  type    QuestionType
+  text    String
+  options Json?        // MULTIPLE_CHOICE: string[] of choices
+  answer  String?      // MULTIPLE_CHOICE/TRUE_FALSE/SHORT_ANSWER: correct answer; ESSAY: null, graded manually
+
+  @@allow('read', true)
+  @@allow('all', auth().role == ADMIN)
+}
+
+model QuizAttempt with Base {
+  quizId String
+  Quiz   Quiz   @relation(fields: [quizId], references: [id])
+
+  userId String
+  User   User   @relation(fields: [userId], references: [id])
+
+  score  Int?
+
+  @@unique([quizId, userId])
+
+  @@allow('read', auth().id == userId)
+  @@allow('create,update', auth().id == userId && score == null)
+  @@allow('all', auth().role == ADMIN)
+}

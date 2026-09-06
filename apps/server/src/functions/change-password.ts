@@ -45,7 +45,7 @@ export const changePassword = tuser
       data: { passwordHash: newHashed },
     });
 
-    // Never log input verbatim — it's the old/new plaintext passwords, and
+    // Never log input verbatim - it's the old/new plaintext passwords, and
     // logs go to stdout/Loki, which far more people can read than the DB.
     log.info(`changePassword`, { username: found.username });
 

@@ -16,15 +16,20 @@
     "typecheck": "pnpm tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "edit:server-secrets": "sops ../../secrets/production/server.sops.yaml",
+    "edit:web-secrets": "sops ../../secrets/production/web.sops.yaml",
+    "edit:infra-secrets": "sops ../../secrets/production/infra.sops.yaml"
   },
   "zenstack": {
-    "schema": "./src/zenstack"
+    "schema": "./src/zenstack/schema.zmodel"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@dotenvx/dotenvx": "2.21.0",
+    "@faker-js/faker": "10.6.0",
     "@total-typescript/ts-reset": "0.6.1",
     "@tsconfig/node22": "22.0.5",
     "@types/bcrypt": "6.0.0",

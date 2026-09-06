@@ -6,10 +6,6 @@ const WEB_PORT = process.env.WEB_PORT || "5173";
 export default defineConfig({
   globalSetup: "./tests/global-setup.ts",
   testDir: "./tests",
-  // Default testMatch also picks up *.test.ts, which is Vitest's file
-  // under tests/unit/. Existing specs already use .spec.ts, so this is
-  // a no-op for them and just frees .test.ts for Vitest.
-  testMatch: "**/*.spec.ts",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

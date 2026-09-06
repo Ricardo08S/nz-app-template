@@ -42,14 +42,15 @@ export const envSchema = z.object({
   // bucket from the host, so this already includes the bucket.
   PUBLIC_S3_ENDPOINT: z.url().optional(),
 
-  // OIDC — ships with the template but is opt-in. Leave unset to run without it.
+  // OIDC - ships with the template but is opt-in. Leave unset to run without it.
   OIDC_ISSUER: z.url().optional(),
   OIDC_CLIENT_ID: z.string().optional(),
   OIDC_CLIENT_SECRET: z.string().optional(),
   OIDC_REDIRECT_URI: z.url().optional(),
   OIDC_STATE: z.string().optional(),
+  OIDC_DIRECT_URI: z.string().optional(),
 
-  // Grafana Loki — opt-in. No observability stack is required to run.
+  // Grafana Loki - opt-in. No observability stack is required to run.
   LOKI_URL: z.url().optional(),
 });
 
@@ -82,14 +83,10 @@ const buildOidcSettings = (e: ParsedEnv): OidcSettings | null => {
   };
 };
 
-export type ParseEnvResult =
-  | { success: true; env: Env }
-  | { success: false; error: z.ZodError };
+export type ParseEnvResult = { success: true; env: Env } | { success: false; error: z.ZodError };
 
 /** Kept free of dotenv and process.exit so tests can call it directly. */
-export const parseEnv = (
-  source: Record<string, unknown> = process.env,
-): ParseEnvResult => {
+export const parseEnv = (source: Record<string, unknown> = process.env): ParseEnvResult => {
   const parsed = envSchema.safeParse(source);
   if (!parsed.success) {
     return { success: false, error: parsed.error };

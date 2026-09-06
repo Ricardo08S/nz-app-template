@@ -10,7 +10,7 @@ import {
 import SuperJSON from "superjson";
 import type { AppRouter } from "../../../server/src/router";
 import type { SchemaType } from "../../../server/src/zenstack/schema";
-import { config } from "$lib/config";
+import { config as env } from "$lib/config";
 import { token } from "./stores/token.svelte";
 import { myFetch, myFetchNoRefresh } from "./my-fetch.svelte";
 import { typedClient, type WithZenStack, type WithClient } from "zenstack-trpc";
@@ -24,11 +24,11 @@ const createTRPC = (fetch?: Parameters<typeof httpBatchLink>[0]["fetch"]) =>
         condition: (op) => op.type === "subscription",
         true: httpSubscriptionLink({
           transformer: SuperJSON,
-          url: `${config.PUBLIC_BACKEND_URL}/trpc`,
+          url: `${env.PUBLIC_BACKEND_URL}/trpc`,
         }),
         false: httpBatchLink({
           transformer: SuperJSON,
-          url: `${config.PUBLIC_BACKEND_URL}/trpc`,
+          url: `${env.PUBLIC_BACKEND_URL}/trpc`,
           headers: () => {
             const res: HTTPHeaders = {};
             if (token.value) {
@@ -51,6 +51,6 @@ import { useClientQueries } from "@zenstackhq/tanstack-query/svelte";
 import { schema } from "$lib/zenstack/schema";
 
 export const client = useClientQueries(schema, () => ({
-  endpoint: `${config.PUBLIC_BACKEND_URL}/api/model`,
+  endpoint: `${env.PUBLIC_BACKEND_URL}/api/model`,
   fetch: myFetch,
 }));

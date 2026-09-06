@@ -1,6 +1,6 @@
 <script lang="ts">
   import { browser } from "$app/environment";
-  import { config } from "$lib/config";
+  import { config as env } from "$lib/config";
   import { toast } from "$lib";
   import favicon from "$lib/assets/favicon.svg";
   import { trpc } from "$lib/client.svelte";
@@ -38,9 +38,9 @@
   });
 
   setQuerySettingsContext({
-    endpoint: `${config.PUBLIC_BACKEND_URL}/api/model`,
+    endpoint: `${env.PUBLIC_BACKEND_URL}/api/model`,
     fetch: myFetch,
-    logging: config.PUBLIC_ENABLE_LOGGING.toLowerCase() === "true",
+    logging: env.PUBLIC_ENABLE_LOGGING?.toLowerCase() === "true",
   });
 
   const queryClient = new QueryClient({

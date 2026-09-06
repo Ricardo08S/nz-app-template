@@ -14,17 +14,12 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 env:
   APP_ENV: ${{ github.ref_name }}
 
 jobs:
-  build:
-    uses: ./.github/workflows/build.yml
-
   deploy:
-    needs: build
     name: Deploy to VPS
     runs-on: self-hosted
     environment: ${{ github.ref_name }}
@@ -74,17 +69,10 @@ jobs:
       - name: Validate apps/server/.env against the runtime schema
         run: pnpm exec tsx scripts/validate-env.ts apps/server/.env
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Blue-green deploy
-        run: |
-          bash deploy/deploy.sh \
-            "${{ env.APP_ENV }}" \
-            "ghcr.io/${{ github.repository }}-server@${{ needs.build.outputs.server_digest }}" \
-            "ghcr.io/${{ github.repository }}-web@${{ needs.build.outputs.web_digest }}" \
-            "${{ github.sha }}"
+      # No GHCR: builds server/web images right here on the runner (which is
+      # the VPS itself for a self-hosted setup) and hands them straight to
+      # deploy.sh. See deploy/local-build-deploy.sh for why this needs no
+      # changes to deploy.sh/docker-compose.app.yml — it only cares about
+      # the image ref string, not where it came from.
+      - name: Build and deploy (local images)
+        run: bash deploy/local-build-deploy.sh "${{ env.APP_ENV }}"

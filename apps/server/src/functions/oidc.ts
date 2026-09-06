@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { generateTokensFromUser } from "../common.js";
 import { env } from "../env.js";
 import { type OidcSettings } from "../env-schema.js";
-import { axios, type JsonValue, renderIf, z } from "../lib.js";
+import { axios, type JsonValue, z } from "../lib.js";
 import { t } from "../trpc.js";
 import { Role } from "../zenstack/models.js";
 
@@ -54,6 +54,11 @@ interface OIDCConfiguration {
   issuer: string;
 }
 
+interface OIDCState {
+  direct?: string;
+  redirectUrl?: string;
+}
+
 /** Prefer the provider's own error body over axios's generic message. */
 const describeError = (error: unknown): unknown =>
   axios.isAxiosError(error) ? (error.response?.data ?? error.message) : error;
@@ -98,23 +103,34 @@ async function getOIDCConfiguration(): Promise<OIDCConfiguration> {
  * Initiate OIDC login flow
  * Returns the authorization URL that the client should redirect to
  */
-export const oidcInitiateLogin = t.procedure.query(async () => {
-  const oidc = requireOidcSettings();
-  const config = await getOIDCConfiguration();
+export const oidcInitiateLogin = t.procedure
+  .input(
+    z.object({
+      redirectUrl: z.string().optional(),
+    }),
+  )
+  .query(async ({ input }) => {
+    const oidc = requireOidcSettings();
+    const config = await getOIDCConfiguration();
+    const state: OIDCState = {
+      direct: env.OIDC_DIRECT_URI,
+      redirectUrl: input.redirectUrl,
+    };
 
-  const params = new URLSearchParams({
-    client_id: oidc.clientId,
-    redirect_uri: oidc.redirectUri,
-    response_type: "code",
-    scope: "openid profile email role group",
+    const params = new URLSearchParams({
+      client_id: oidc.clientId,
+      redirect_uri: oidc.redirectUri,
+      response_type: "code",
+      scope: "openid profile email role group",
+      state: JSON.stringify(state),
+    });
+
+    const authUrl = `${config.authorization_endpoint}?${params}`;
+
+    return {
+      authUrl,
+    };
   });
-
-  const authUrl = `${config.authorization_endpoint}?${params}`;
-
-  return {
-    authUrl,
-  };
-});
 
 /**
  * Handle OIDC callback after user authenticates with provider
@@ -141,7 +157,6 @@ export const oidcHandleCallback = t.procedure
             redirect_uri: oidc.redirectUri,
             client_id: oidc.clientId,
             client_secret: oidc.clientSecret,
-            state: oidc.state,
           }),
           {
             headers: {
@@ -176,10 +191,10 @@ export const oidcHandleCallback = t.procedure
 
       const userInfo = userInfoResponse.data;
       // OIDCUserInfo carries an index signature (above) so this is a direct,
-      // structurally valid cast — not a type-system escape hatch.
+      // structurally valid cast - not a type-system escape hatch.
       const userInfoJson = userInfo as JsonValue;
 
-      // Log only the identifier, not the full PII blob — logs go to
+      // Log only the identifier, not the full PII blob - logs go to
       // stdout/Loki, which far more people can read than the DB.
       log.info(`oidc:user-info`, { sub: userInfo.sub });
 
@@ -261,8 +276,7 @@ export const oidcLogout = t.procedure.query(async () => {
   const oidc = requireOidcSettings();
   const config = await getOIDCConfiguration();
   const logoutUrl =
-    config.end_session_endpoint ||
-    `${oidc.issuer}/protocol/openid-connect/logout`;
+    config.end_session_endpoint || `${oidc.issuer}/protocol/openid-connect/logout`;
   return { logoutUrl };
 });
 

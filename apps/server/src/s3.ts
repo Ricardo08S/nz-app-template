@@ -91,7 +91,7 @@ export const getFileUrl = (key: string): string => {
 export const getFileSize = async (
   key: string,
 ): Promise<{ size: number; contentType: string }> => {
-  // Only the S3 call itself falls back to a generic "does not exist" — the
+  // Only the S3 call itself falls back to a generic "does not exist" - the
   // two validation throws below must propagate with their own message, not
   // get swallowed by the same catch.
   let res: HeadObjectCommandOutput;

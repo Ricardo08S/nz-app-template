@@ -15,9 +15,10 @@ export const tuser = t.procedure.use(async ({ ctx, next }) => {
     },
   });
 });
-// Server-side enforcement of the ADMIN role — the (admin) route group in web
-// only hides the UI, it never restricted the underlying tRPC calls. Any
-// procedure meant to be admin-only must use this, not tuser.
+// Convenience gate for procedure-level admin checks. The real enforcement is
+// the ZenStack @@allow/@@deny policies in the schema (auth().role == ADMIN) -
+// those apply no matter which client hits the API. This just saves a round
+// trip to the DB when a whole procedure should be admin-only up front.
 export const tadmin = tuser.use(async ({ ctx, next }) => {
   if (ctx.user.role !== "ADMIN") {
     throw forbiddenError;
