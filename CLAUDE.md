@@ -121,16 +121,13 @@ Full step-by-step VPS setup is in `README.md`; this is the code map.
   previously-deployed commit) → migrates → starts the new slot → health-checks it → switches Caddy
   → verifies → stops the old slot. A breaking migration takes a different, non-zero-downtime path:
   backup the DB, stop the old slot *before* migrating (they share one DB, so the old slot can't be
-  left running against a schema it doesn't understand), then proceed.
+  left running against a schema it doesn't understand), then proceed. Migrations never run
+  unconfirmed: no new migration files → step is skipped; new ones present → deploy aborts unless
+  `CONFIRM_MIGRATIONS=true` (set via the `deploy.yml` `workflow_dispatch` input).
 - **`deploy/rollback.sh`** — flips back to the previous slot (`state.json.previous`). Refuses
   outright if the last deploy was a breaking migration — the old slot's code no longer matches the
   schema, so a pointer flip would just crash it. The message it prints points at the DB backup
   instead.
-- **`deploy/local-build-deploy.sh`** — builds `server`/`web` images locally and tags them, then
-  calls `deploy.sh` with those tags. `deploy.sh` never checks where an image ref came from, so this
-  needs no changes to `deploy.sh`/`docker-compose.app.yml`/`deploy.yml`. Use this to skip GHCR
-  entirely (no registry, no `docker login`) — `build.yml`/GHCR stay in the repo as the default CI
-  path, untouched.
 - **`scripts/scan-migrations.ts`** — classifies a `migration.sql` file as breaking (`DROP TABLE`,
   `DROP COLUMN`, `ALTER COLUMN ... TYPE`, `RENAME`, `ADD COLUMN ... NOT NULL` without a `DEFAULT`)
   or safe, by matching real DDL keywords (not Prisma's own `-- DropTable`-style comments, which

@@ -63,6 +63,7 @@ APP_NAME="$APP_NAME" APP_ENV="$APP_ENV" SLOT="$TARGET_SLOT" \
 #    the deploy rather than silently assuming "no breaking migrations" —
 #    getting this wrong in the unsafe direction is worse than aborting.
 BREAKING=false
+NEW_MIGRATIONS=()
 if [ -n "$ACTIVE_SLOT" ] && [ "$PREV_SHA" != "null" ]; then
   if ! git cat-file -e "${PREV_SHA}^{commit}" 2>/dev/null; then
     echo "Previously-deployed commit $PREV_SHA is not in this checkout's history — cannot safely determine whether new migrations are breaking. Aborting (check actions/checkout fetch-depth)." >&2
@@ -79,6 +80,16 @@ if [ -n "$ACTIVE_SLOT" ] && [ "$PREV_SHA" != "null" ]; then
   fi
 fi
 echo "Mode: $([ "$BREAKING" = true ] && echo breaking || echo normal)"
+
+# 4. Migrations never run unconfirmed. First deploy always needs them
+# (empty DB); after that, only re-run with CONFIRM_MIGRATIONS=true once
+# you've reviewed the list below.
+if [ -n "$ACTIVE_SLOT" ] && [ "${#NEW_MIGRATIONS[@]}" -gt 0 ] && [ "${CONFIRM_MIGRATIONS:-}" != "true" ]; then
+  echo "New migration(s) pending, not applied automatically:" >&2
+  printf '  %s\n' "${NEW_MIGRATIONS[@]}" >&2
+  echo "Re-run with CONFIRM_MIGRATIONS=true to apply and continue this deploy." >&2
+  exit 1
+fi
 
 if [ "$BREAKING" = true ]; then
   # Breaking mode (§4.7): backup first — a breaking migration means rollback
@@ -101,9 +112,14 @@ fi
 # 5. Run pending migrations as a one-off container from the *new* image, so
 #    the migration files that run are exactly the ones baked into what's
 #    about to be deployed — not whatever happens to be checked out on the
-#    runner.
-echo "Running migrations..."
-docker run --rm --network appnet --env-file apps/server/.env "$SERVER_IMAGE" pnpm migrate:deploy
+#    runner. Skipped when there's nothing new to apply (confirmed above
+#    otherwise) — no point starting a container just to no-op.
+if [ -z "$ACTIVE_SLOT" ] || [ "${#NEW_MIGRATIONS[@]}" -gt 0 ]; then
+  echo "Running migrations..."
+  docker run --rm --network appnet --env-file apps/server/.env "$SERVER_IMAGE" pnpm migrate:deploy
+else
+  echo "No new migrations — skipping."
+fi
 
 # 6. Bring up the target slot — network alias only, not receiving traffic yet.
 echo "Starting slot $TARGET_SLOT..."

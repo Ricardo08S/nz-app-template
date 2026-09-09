@@ -80,6 +80,17 @@ jobs:
         run: pnpm generate
         working-directory: apps/server
 
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Run server unit tests
+        run: pnpm test
+        working-directory: apps/server
+
+      - name: Run web unit tests
+        run: pnpm test:unit
+        working-directory: apps/web
+
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
         working-directory: apps/web

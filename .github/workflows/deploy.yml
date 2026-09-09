@@ -11,15 +11,26 @@ on:
       - apps/web/**
       - deploy/**
       - .github/workflows/**
+  workflow_dispatch:
+    inputs:
+      confirm_migrations:
+        description: "Apply pending migrations (deploy.sh aborts otherwise if any exist)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+  packages: write
 
 env:
   APP_ENV: ${{ github.ref_name }}
 
 jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+
   deploy:
+    needs: build
     name: Deploy to VPS
     runs-on: self-hosted
     environment: ${{ github.ref_name }}
@@ -34,11 +45,7 @@ jobs:
           # single-commit clone, or that diff would fail outright.
           fetch-depth: 0
 
-      # server.sops.yaml references $POSTGRES_PASSWORD (from infra.sops.yaml)
-      # and $APP_NAME/$BASE_DOMAIN (from deploy/env/production.env) — these
-      # only resolve if all three land in the same .env, because
-      # dotenv-expand (apps/server/src/env.ts) resolves $VAR against
-      # whatever else it just loaded from that one file, not across files.
+      # Merged into one .env so dotenv-expand can resolve $POSTGRES_PASSWORD/$APP_NAME/$BASE_DOMAIN across files.
       - name: Decrypt and merge secrets
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
@@ -69,10 +76,19 @@ jobs:
       - name: Validate apps/server/.env against the runtime schema
         run: pnpm exec tsx scripts/validate-env.ts apps/server/.env
 
-      # No GHCR: builds server/web images right here on the runner (which is
-      # the VPS itself for a self-hosted setup) and hands them straight to
-      # deploy.sh. See deploy/local-build-deploy.sh for why this needs no
-      # changes to deploy.sh/docker-compose.app.yml — it only cares about
-      # the image ref string, not where it came from.
-      - name: Build and deploy (local images)
-        run: bash deploy/local-build-deploy.sh "${{ env.APP_ENV }}"
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Blue-green deploy
+        env:
+          CONFIRM_MIGRATIONS: ${{ github.event.inputs.confirm_migrations || 'false' }}
+        run: |
+          bash deploy/deploy.sh \
+            "${{ env.APP_ENV }}" \
+            "ghcr.io/${{ github.repository }}-server@${{ needs.build.outputs.server_digest }}" \
+            "ghcr.io/${{ github.repository }}-web@${{ needs.build.outputs.web_digest }}" \
+            "${{ github.sha }}"
