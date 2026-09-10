@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **This is a template.** Every "nz-app-template" placeholder (package names, `APP_NAME`
+> defaults, example domains) must be replaced with your real project's name before this
+> is used for anything beyond local experimentation. Grep for `nz-app-template` repo-wide
+> and replace what you find.
+
 ## Commands
 
 ### Root (monorepo)
@@ -20,7 +25,7 @@ pnpm db:push              # push schema without migration (dev only)
 pnpm migrate:dev          # create + apply migration
 pnpm migrate:deploy       # apply migrations in production
 pnpm db:studio            # ZenStack studio UI
-pnpm db:seed              # run src/scripts/seed.ts
+pnpm db:seed              # run src/scripts/seed.ts (admin/user, password "password123")
 ```
 
 ### Web (`apps/web`)
@@ -31,14 +36,12 @@ pnpm typecheck    # svelte-kit sync + svelte-check
 pnpm lint         # prettier --check
 pnpm format       # prettier --write
 pnpm test         # Playwright e2e tests
-pnpm test:ui      # Playwright UI mode
-pnpm test:headed  # visible browser
 ```
 
 ### Local services
 ```bash
 docker compose -f docker-compose.services.yml up -d      # Postgres + Garage
-bash scripts/garage-init.sh nz-app-template-development  # bucket, key, public reads
+bash scripts/garage-init.sh nz-app-template-development  # bucket, key, public reads, CORS
 ```
 Garage replaces MinIO (community edition archived April 2026). It exposes two
 ports: `3900` for signed S3 calls and `3902` for anonymous reads, where the
@@ -56,13 +59,14 @@ Pnpm monorepo with two workspaces: `apps/server` and `apps/web`. Web imports ser
 
 Express + tRPC + ZenStack v3 on PostgreSQL via Kysely.
 
-- **`src/zenstack/`** — ZenStack schema files (`.zmodel`) and generated outputs (`schema.ts`, `models.ts`, `input.ts`). `core.zmodel` defines base types and core models (User, File, RefreshToken, Post). `app.zmodel` has app-specific models. **Edit `.zmodel` files, then run `pnpm generate`.** `migrations/` lives here too (not at `apps/server/migrations/`) because Prisma puts migration history next to the schema it was generated from.
+- **`src/zenstack/`** — ZenStack schema files (`.zmodel`) and generated outputs (`schema.ts`, `models.ts`, `input.ts`). `core.zmodel` defines base types (User, File, RefreshToken) plus the RBAC primitives: `Role` enum (`ADMIN`/`USER`), `RolePermission` (custom permission strings per role), and `AuthInfo`'s `permissions: string[]` (merged from the user's own `permissions` + their role's `RolePermission`, baked into the JWT by `generateTokensFromUser`). `app.zmodel` is where your own models go — it's empty on purpose. **Edit `.zmodel` files, then run `pnpm generate`.** `migrations/` lives here too (not at `apps/server/migrations/`) because Prisma puts migration history next to the schema it was generated from.
+- **RBAC is enforced at the data layer**, not client-side: write `@@allow('all', auth().role == ADMIN)` (or check `auth().permissions`) directly on your models, same as `core.zmodel` already does on `User`. This applies no matter which client hits the API (tRPC, REST `/api/model`, anything else) — don't rely on hiding a button in the UI.
 - **`src/db.ts`** — `ZenStackClient` (raw, no policies) as `db`; `authDb = db.$use(new PolicyPlugin())` enforces access policies. Always use `userDb` (context-scoped, auth set) inside tRPC handlers for policy-enforced queries.
-- **`src/context.ts`** — tRPC context: extracts JWT from `Authorization` header, creates `userDb = authDb.$setAuth(user)`, provides `log` (per-request logger — see Logging below).
-- **`src/trpc.ts`** — `t` (public procedure), `tuser` (authenticated procedure that throws 401 if no user).
+- **`src/context.ts`** — tRPC context: extracts JWT from `Authorization` header, creates `userDb = authDb.$setAuth(user)`, provides `log` (per-request logger — see Logging below). `getClient` does the same for the `/api/model` REST endpoint. Both **must** call `$setAuth` — without it every `@@allow`/`@@deny` policy is silently bypassed.
+- **`src/trpc.ts`** — `t` (public procedure), `tuser` (authenticated, throws 401 if no user), `tadmin` (built on `tuser`, throws 403 unless `role === "ADMIN"`) — a convenience for gating a whole procedure up front; the real enforcement is still the schema policies above.
 - **`src/router.ts`** — root `appRouter`; CRUD routes auto-generated via `createZenStackRouter(schema, t)` mounted at `crud`.
 - **`src/main.ts`** — Express app. Routes: `/trpc` (tRPC), `/api/model` (ZenStack REST RPC), `/health/live` (process is up — Docker healthcheck), `/health/ready` (DB + object storage reachable — this is what blue-green deploy polls before switching traffic), `/health/version` (returns `{ sha, appName, appEnv }` — checked against the public domain after a deploy to confirm the switch actually happened).
-- **`src/functions/`** — individual tRPC procedures (login, register, me, refresh, oidc, file-upload, change-password, etc.).
+- **`src/functions/`** — individual tRPC procedures (login, register, me, refresh, setup-password, oidc, file-upload, change-password, etc.).
 - **`src/shared/`** — code shared with web (jwt utils, upload helpers). Symlinked/imported by web at `src/lib/shared/`.
 
 ### Web (`apps/web`)
@@ -74,14 +78,14 @@ SvelteKit (static adapter) + TailwindCSS v4 + DaisyUI + TanStack Query.
   - `client` — ZenStack v3 RPC client via `useClientQueries` hitting `/api/model`.
 - **`src/lib/my-fetch.svelte.ts`** — fetch wrapper that intercepts 401s, refreshes access token via `trpc_.refresh`, retries. Uses a mutex to prevent concurrent refresh races.
 - **`src/lib/stores/`** — Svelte 5 rune-based stores: `token` (access JWT), `refresh` (refresh JWT), `user`, `theme`.
-- **`src/routes/(core)/(app)/`** — authenticated app shell with Navbar/Footer. `(admin)` sub-group for admin-only pages.
+- **`src/routes/(core)/(app)/`** — authenticated app shell with Navbar/Footer. `(admin)` sub-group for admin-only pages — its layout guard is a UI convenience only (see RBAC note above), not a security boundary by itself.
 - **`src/lib/zenstack/`** — generated ZenStack client types (do not edit manually).
 
 ### Auth flow
 
 JWT-based dual-token (access + refresh). Access token sent as `Authorization` header (bare token, not `Bearer`). On 401, web auto-refreshes via `/trpc/refresh` mutation. ZenStack access policies use `auth()` which resolves from the token payload (no DB lookup per request).
 
-OIDC login is **opt-in**: `env.oidc` (`apps/server/src/env-schema.ts`) is `OidcSettings | null`, non-null only when all four `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`/`OIDC_REDIRECT_URI` env vars are set. `requireOidcSettings()` in `functions/oidc.ts` throws `PRECONDITION_FAILED` if an OIDC procedure is called while unconfigured — the app boots and runs fine with OIDC completely unset.
+OIDC login is **opt-in**: `env.oidc` (`apps/server/src/env-schema.ts`) is `OidcSettings | null`, non-null only when all four `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`/`OIDC_REDIRECT_URI` env vars are set. `requireOidcSettings()` in `functions/oidc.ts` throws `PRECONDITION_FAILED` if an OIDC procedure is called while unconfigured — the app boots and runs fine with OIDC completely unset. `setupPassword` lets an OIDC-only user set a first password so they can also log in without the provider.
 
 ### Logging
 
@@ -94,6 +98,8 @@ Presigned S3 URLs: client calls `getUploadUrl` tRPC → gets presigned PUT URL �
 `AWS_S3_ENDPOINT` signs uploads; `PUBLIC_S3_ENDPOINT` serves reads. They are different hosts and must not be swapped — a signature is bound to the host it was made for.
 
 The S3 client sets `requestChecksumCalculation: "WHEN_REQUIRED"`. Without it the SDK signs a CRC32 it cannot compute ahead of the upload, and S3-compatible servers reject the PUT with `InvalidDigest`.
+
+The browser PUTs directly to Garage, so the bucket needs CORS (`PutBucketCors`) or the preflight `OPTIONS` fails. `scripts/garage-init.sh` sets this (via a throwaway `amazon/aws-cli` container, since Garage's own CLI has no CORS subcommand) — a bucket bootstrapped before this was added needs the script re-run.
 
 ## Deployment
 
@@ -115,7 +121,9 @@ Full step-by-step VPS setup is in `README.md`; this is the code map.
   previously-deployed commit) → migrates → starts the new slot → health-checks it → switches Caddy
   → verifies → stops the old slot. A breaking migration takes a different, non-zero-downtime path:
   backup the DB, stop the old slot *before* migrating (they share one DB, so the old slot can't be
-  left running against a schema it doesn't understand), then proceed.
+  left running against a schema it doesn't understand), then proceed. Migrations never run
+  unconfirmed: no new migration files → step is skipped; new ones present → deploy aborts unless
+  `CONFIRM_MIGRATIONS=true` (set via the `deploy.yml` `workflow_dispatch` input).
 - **`deploy/rollback.sh`** — flips back to the previous slot (`state.json.previous`). Refuses
   outright if the last deploy was a breaking migration — the old slot's code no longer matches the
   schema, so a pointer flip would just crash it. The message it prints points at the DB backup
@@ -128,3 +136,6 @@ Full step-by-step VPS setup is in `README.md`; this is the code map.
 **Known limitation, worth fixing before relying on it further:** `scripts/validate-env.ts` only
 validates `apps/server/.env` against its Zod schema; `apps/web/.env` is written by the same CI/deploy
 steps but never validated, so a broken `PUBLIC_*` value only surfaces at runtime in the browser.
+
+**`secrets/` is empty** — this project has no age keys yet. See `secrets/README.md` and README's
+"Secrets (SOPS + age)" section before your first real deploy.

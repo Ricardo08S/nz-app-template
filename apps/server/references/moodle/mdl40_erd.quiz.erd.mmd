@@ -1,0 +1,610 @@
+erDiagram
+  qtype_ddimageortext {
+    bigint id PK
+    bigint questionid FK
+    int shuffleanswers
+    text correctfeedback
+    int correctfeedbackformat
+    text partiallycorrectfeedback
+    int partiallycorrectfeedbackformat
+    text incorrectfeedback
+    int incorrectfeedbackformat
+    int shownumcorrect
+  }
+  qtype_ddimageortext_drags {
+    bigint id PK
+    bigint questionid FK
+    bigint no
+    bigint draggroup
+    int infinite
+    text label
+  }
+  qtype_ddimageortext_drops {
+    bigint id PK
+    bigint questionid FK
+    bigint no
+    bigint xleft
+    bigint ytop
+    bigint choice
+    text label
+  }
+  qtype_ddmarker {
+    bigint id PK
+    bigint questionid FK
+    int shuffleanswers
+    text correctfeedback
+    int correctfeedbackformat
+    text partiallycorrectfeedback
+    int partiallycorrectfeedbackformat
+    text incorrectfeedback
+    int incorrectfeedbackformat
+    int shownumcorrect
+    int showmisplaced
+  }
+  qtype_ddmarker_drags {
+    bigint id PK
+    bigint questionid FK
+    bigint no
+    text label
+    int infinite
+    bigint noofdrags
+  }
+  qtype_ddmarker_drops {
+    bigint id PK
+    bigint questionid FK
+    bigint no
+    varchar shape
+    text coords
+    bigint choice
+  }
+  qtype_essay_options {
+    bigint id PK
+    bigint questionid FK
+    varchar responseformat
+    int responserequired
+    int responsefieldlines
+    bigint minwordlimit
+    bigint maxwordlimit
+    int attachments
+    int attachmentsrequired
+    text graderinfo
+    int graderinfoformat
+    text responsetemplate
+    int responsetemplateformat
+    bigint maxbytes
+    text filetypeslist
+  }
+  qtype_match_options {
+    bigint id PK
+    bigint questionid FK
+    int shuffleanswers
+    text correctfeedback
+    int correctfeedbackformat
+    text partiallycorrectfeedback
+    int partiallycorrectfeedbackformat
+    text incorrectfeedback
+    int incorrectfeedbackformat
+    int shownumcorrect
+  }
+  qtype_match_subquestions {
+    bigint id PK
+    bigint questionid FK
+    text questiontext
+    int questiontextformat
+    varchar answertext
+  }
+  qtype_multichoice_options {
+    bigint id PK
+    bigint questionid FK
+    int layout
+    int single
+    int shuffleanswers
+    text correctfeedback
+    int correctfeedbackformat
+    text partiallycorrectfeedback
+    int partiallycorrectfeedbackformat
+    text incorrectfeedback
+    int incorrectfeedbackformat
+    varchar answernumbering
+    int shownumcorrect
+    int showstandardinstruction
+  }
+  qtype_randomsamatch_options {
+    bigint id PK
+    bigint questionid FK
+    bigint choose
+    int subcats
+    text correctfeedback
+    int correctfeedbackformat
+    text partiallycorrectfeedback
+    int partiallycorrectfeedbackformat
+    text incorrectfeedback
+    int incorrectfeedbackformat
+    int shownumcorrect
+  }
+  qtype_shortanswer_options {
+    bigint id PK
+    bigint questionid FK
+    int usecase
+  }
+  question {
+    bigint id PK
+    bigint parent FK
+    varchar name
+    text questiontext
+    int questiontextformat
+    text generalfeedback
+    int generalfeedbackformat
+    decimal defaultmark
+    decimal penalty
+    varchar qtype
+    bigint length
+    varchar stamp
+    bigint timecreated
+    bigint timemodified
+    bigint createdby FK
+    bigint modifiedby FK
+  }
+  question_answers {
+    bigint id PK
+    bigint question FK
+    text answer
+    int answerformat
+    decimal fraction
+    text feedback
+    int feedbackformat
+  }
+  question_attempt_step_data {
+    bigint id PK
+    bigint attemptstepid FK
+    varchar name
+    text value
+  }
+  question_attempt_steps {
+    bigint id PK
+    bigint questionattemptid FK
+    bigint sequencenumber
+    varchar state
+    decimal fraction
+    bigint timecreated
+    bigint userid FK
+  }
+  question_attempts {
+    bigint id PK
+    bigint questionusageid FK
+    bigint slot
+    varchar behaviour
+    bigint questionid FK
+    bigint variant
+    decimal maxmark
+    decimal minfraction
+    decimal maxfraction
+    bit flagged
+    text questionsummary
+    text rightanswer
+    text responsesummary
+    bigint timemodified
+  }
+  question_bank_entries {
+    bigint id PK
+    bigint questioncategoryid FK
+    varchar idnumber
+    bigint ownerid FK
+  }
+  question_calculated {
+    bigint id PK
+    bigint question FK
+    bigint answer
+    varchar tolerance
+    bigint tolerancetype
+    bigint correctanswerlength
+    bigint correctanswerformat
+  }
+  question_calculated_options {
+    bigint id PK
+    bigint question FK
+    int synchronize
+    int single
+    int shuffleanswers
+    text correctfeedback
+    int correctfeedbackformat
+    text partiallycorrectfeedback
+    int partiallycorrectfeedbackformat
+    text incorrectfeedback
+    int incorrectfeedbackformat
+    varchar answernumbering
+    int shownumcorrect
+  }
+  question_categories {
+    bigint id PK
+    varchar name
+    bigint contextid FK
+    text info
+    int infoformat
+    varchar stamp
+    bigint parent FK
+    bigint sortorder
+    varchar idnumber
+  }
+  question_dataset_definitions {
+    bigint id PK
+    bigint category FK
+    varchar name
+    bigint type
+    varchar options
+    bigint itemcount
+  }
+  question_dataset_items {
+    bigint id PK
+    bigint definition
+    bigint itemnumber
+    varchar value
+  }
+  question_datasets {
+    bigint id PK
+    bigint question FK
+    bigint datasetdefinition FK
+  }
+  question_ddwtos {
+    bigint id PK
+    bigint questionid FK
+    int shuffleanswers
+    text correctfeedback
+    int correctfeedbackformat
+    text partiallycorrectfeedback
+    int partiallycorrectfeedbackformat
+    text incorrectfeedback
+    int incorrectfeedbackformat
+    int shownumcorrect
+  }
+  question_gapselect {
+    bigint id PK
+    bigint questionid FK
+    int shuffleanswers
+    text correctfeedback
+    int correctfeedbackformat
+    text partiallycorrectfeedback
+    int partiallycorrectfeedbackformat
+    text incorrectfeedback
+    int incorrectfeedbackformat
+    int shownumcorrect
+  }
+  question_hints {
+    bigint id PK
+    bigint questionid FK
+    text hint
+    int hintformat
+    bit shownumcorrect
+    bit clearwrong
+    varchar options
+  }
+  question_multianswer {
+    bigint id PK
+    bigint question FK
+    text sequence
+  }
+  question_numerical {
+    bigint id PK
+    bigint question FK
+    bigint answer
+    varchar tolerance
+  }
+  question_numerical_options {
+    bigint id PK
+    bigint question FK
+    int showunits
+    int unitsleft
+    int unitgradingtype
+    decimal unitpenalty
+  }
+  question_numerical_units {
+    bigint id PK
+    bigint question FK
+    decimal multiplier
+    varchar unit
+  }
+  question_references {
+    bigint id PK
+    bigint usingcontextid FK
+    varchar component
+    varchar questionarea
+    bigint itemid
+    bigint questionbankentryid FK
+    bigint version
+  }
+  question_response_analysis {
+    bigint id PK
+    varchar hashcode
+    varchar whichtries
+    bigint timemodified
+    bigint questionid FK
+    bigint variant
+    varchar subqid
+    varchar aid
+    text response
+    decimal credit
+  }
+  question_response_count {
+    bigint id PK
+    bigint analysisid FK
+    bigint try
+    bigint rcount
+  }
+  question_set_references {
+    bigint id PK
+    bigint usingcontextid FK
+    varchar component
+    varchar questionarea
+    bigint itemid
+    bigint questionscontextid FK
+    text filtercondition
+  }
+  question_statistics {
+    bigint id PK
+    varchar hashcode
+    bigint timemodified
+    bigint questionid FK
+    bigint slot
+    int subquestion
+    bigint variant
+    bigint s
+    decimal effectiveweight
+    int negcovar
+    decimal discriminationindex
+    decimal discriminativeefficiency
+    decimal sd
+    decimal facility
+    text subquestions
+    decimal maxmark
+    text positions
+    decimal randomguessscore
+  }
+  question_truefalse {
+    bigint id PK
+    bigint question FK
+    bigint trueanswer
+    bigint falseanswer
+  }
+  question_usages {
+    bigint id PK
+    bigint contextid FK
+    varchar component
+    varchar preferredbehaviour
+  }
+  question_versions {
+    bigint id PK
+    bigint questionbankentryid FK
+    bigint version
+    bigint questionid FK
+    varchar status
+  }
+  quiz {
+    bigint id PK
+    bigint course
+    varchar name
+    text intro
+    int introformat
+    bigint timeopen
+    bigint timeclose
+    bigint timelimit
+    varchar overduehandling
+    bigint graceperiod
+    varchar preferredbehaviour
+    int canredoquestions
+    int attempts
+    int attemptonlast
+    int grademethod
+    int decimalpoints
+    int questiondecimalpoints
+    int reviewattempt
+    int reviewcorrectness
+    int reviewmarks
+    int reviewspecificfeedback
+    int reviewgeneralfeedback
+    int reviewrightanswer
+    int reviewoverallfeedback
+    bigint questionsperpage
+    varchar navmethod
+    int shuffleanswers
+    decimal sumgrades
+    decimal grade
+    bigint timecreated
+    bigint timemodified
+    varchar password
+    varchar subnet
+    varchar browsersecurity
+    bigint delay1
+    bigint delay2
+    int showuserpicture
+    int showblocks
+    bit completionattemptsexhausted
+    bigint completionminattempts
+    bit allowofflineattempts
+  }
+  quiz_attempts {
+    bigint id PK
+    bigint quiz FK
+    bigint userid FK
+    int attempt
+    bigint uniqueid FK
+    text layout
+    bigint currentpage
+    int preview
+    varchar state
+    bigint timestart
+    bigint timefinish
+    bigint timemodified
+    bigint timemodifiedoffline
+    bigint timecheckstate
+    decimal sumgrades
+    bigint gradednotificationsenttime
+  }
+  quiz_feedback {
+    bigint id PK
+    bigint quizid FK
+    text feedbacktext
+    int feedbacktextformat
+    decimal mingrade
+    decimal maxgrade
+  }
+  quiz_grades {
+    bigint id PK
+    bigint quiz FK
+    bigint userid FK
+    decimal grade
+    bigint timemodified
+  }
+  quiz_overrides {
+    bigint id PK
+    bigint quiz FK
+    bigint groupid FK
+    bigint userid FK
+    bigint timeopen
+    bigint timeclose
+    bigint timelimit
+    int attempts
+    varchar password
+  }
+  quiz_overview_regrades {
+    bigint id PK
+    bigint questionusageid FK
+    bigint slot FK
+    decimal newfraction
+    decimal oldfraction
+    int regraded
+    bigint timemodified
+  }
+  quiz_reports {
+    bigint id PK
+    varchar name
+    bigint displayorder
+    varchar capability
+  }
+  quiz_sections {
+    bigint id PK
+    bigint quizid FK
+    bigint firstslot
+    varchar heading
+    int shufflequestions
+  }
+  quiz_slots {
+    bigint id PK
+    bigint slot
+    bigint quizid FK
+    bigint page
+    int requireprevious
+    decimal maxmark
+  }
+  quiz_statistics {
+    bigint id PK
+    varchar hashcode
+    int whichattempts
+    bigint timemodified
+    bigint firstattemptscount
+    bigint highestattemptscount
+    bigint lastattemptscount
+    bigint allattemptscount
+    decimal firstattemptsavg
+    decimal highestattemptsavg
+    decimal lastattemptsavg
+    decimal allattemptsavg
+    decimal median
+    decimal standarddeviation
+    decimal skewness
+    decimal kurtosis
+    decimal cic
+    decimal errorratio
+    decimal standarderror
+  }
+  quizaccess_seb_quizsettings {
+    bigint id PK
+    bigint quizid FK
+    bigint cmid FK
+    bigint templateid FK
+    bit requiresafeexambrowser
+    bit showsebtaskbar
+    bit showwificontrol
+    bit showreloadbutton
+    bit showtime
+    bit showkeyboardlayout
+    bit allowuserquitseb
+    text quitpassword
+    text linkquitseb
+    bit userconfirmquit
+    bit enableaudiocontrol
+    bit muteonstartup
+    bit allowspellchecking
+    bit allowreloadinexam
+    bit activateurlfiltering
+    bit filterembeddedcontent
+    text expressionsallowed
+    text regexallowed
+    text expressionsblocked
+    text regexblocked
+    text allowedbrowserexamkeys
+    bit showsebdownloadlink
+    bigint usermodified FK
+    bigint timecreated
+    bigint timemodified
+  }
+  quizaccess_seb_template {
+    bigint id PK
+    varchar name
+    text description
+    text content
+    bit enabled
+    bigint sortorder
+    bigint usermodified FK
+    bigint timecreated
+    bigint timemodified
+  }
+  question ||--o{ qtype_ddimageortext : "questionid"
+  question ||--o{ qtype_ddimageortext_drags : "questionid"
+  question ||--o{ qtype_ddimageortext_drops : "questionid"
+  question ||--o{ qtype_ddmarker : "questionid"
+  question ||--o{ qtype_ddmarker_drags : "questionid"
+  question ||--o{ qtype_ddmarker_drops : "questionid"
+  question ||--o{ qtype_essay_options : "questionid"
+  question ||--o{ qtype_match_options : "questionid"
+  question ||--o{ qtype_match_subquestions : "questionid"
+  question ||--o{ qtype_multichoice_options : "questionid"
+  question ||--o{ qtype_randomsamatch_options : "questionid"
+  question ||--o{ qtype_shortanswer_options : "questionid"
+  question ||--o{ question : "parent"
+  question ||--o{ question_answers : "question"
+  question_attempt_steps ||--o{ question_attempt_step_data : "attemptstepid"
+  question_attempts ||--o{ question_attempt_steps : "questionattemptid"
+  question_usages ||--o{ question_attempts : "questionusageid"
+  question ||--o{ question_attempts : "questionid"
+  question_categories ||--o{ question_bank_entries : "questioncategoryid"
+  question ||--o{ question_calculated : "question"
+  question ||--o{ question_calculated_options : "question"
+  question_categories ||--o{ question_categories : "parent"
+  question_categories ||--o{ question_dataset_definitions : "category"
+  question ||--o{ question_datasets : "question"
+  question_dataset_definitions ||--o{ question_datasets : "datasetdefinition"
+  question ||--o{ question_ddwtos : "questionid"
+  question ||--o{ question_gapselect : "questionid"
+  question ||--o{ question_hints : "questionid"
+  question ||--o{ question_multianswer : "question"
+  question ||--o{ question_numerical : "question"
+  question ||--o{ question_numerical_options : "question"
+  question ||--o{ question_numerical_units : "question"
+  question_bank_entries ||--o{ question_references : "questionbankentryid"
+  question ||--o{ question_response_analysis : "questionid"
+  question_response_analysis ||--o{ question_response_count : "analysisid"
+  question ||--o{ question_statistics : "questionid"
+  question ||--o{ question_truefalse : "question"
+  question_bank_entries ||--o{ question_versions : "questionbankentryid"
+  question ||--o{ question_versions : "questionid"
+  quiz ||--o{ quiz_attempts : "quiz"
+  question_usages ||--o{ quiz_attempts : "uniqueid"
+  quiz ||--o{ quiz_feedback : "quizid"
+  quiz ||--o{ quiz_grades : "quiz"
+  quiz ||--o{ quiz_overrides : "quiz"
+  question_attempts ||--o{ quiz_overview_regrades : "questionusageid"
+  question_attempts ||--o{ quiz_overview_regrades : "slot"
+  quiz ||--o{ quiz_sections : "quizid"
+  quiz ||--o{ quiz_slots : "quizid"
+  quiz ||--o{ quizaccess_seb_quizsettings : "quizid"
+  quizaccess_seb_template ||--o{ quizaccess_seb_quizsettings : "templateid"

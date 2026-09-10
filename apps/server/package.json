@@ -1,5 +1,5 @@
 {
-  "name": "nz-app-template-server",
+  "name": "server",
   "version": "1.0.0",
   "description": "",
   "main": "src/main.ts",
@@ -16,15 +16,20 @@
     "typecheck": "pnpm tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "edit:server-secrets": "sops ../../secrets/production/server.sops.yaml",
+    "edit:web-secrets": "sops ../../secrets/production/web.sops.yaml",
+    "edit:infra-secrets": "sops ../../secrets/production/infra.sops.yaml"
   },
   "zenstack": {
-    "schema": "./src/zenstack"
+    "schema": "./src/zenstack/schema.zmodel"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@dotenvx/dotenvx": "2.21.0",
+    "@faker-js/faker": "10.6.0",
     "@total-typescript/ts-reset": "0.6.1",
     "@tsconfig/node22": "22.0.5",
     "@types/bcrypt": "6.0.0",
@@ -35,8 +40,8 @@
     "@types/node": "26.1.0",
     "@types/pg": "8.20.0",
     "@types/qs": "6.15.1",
-    "@zenstackhq/cli": "3.8.3",
-    "@zenstackhq/tanstack-query": "3.8.3",
+    "@zenstackhq/cli": "3.9.1",
+    "@zenstackhq/tanstack-query": "3.9.1",
     "csv-parse": "7.0.1",
     "js-yaml": "5.2.1",
     "tsx": "4.23.0",
@@ -47,10 +52,10 @@
     "@aws-sdk/client-s3": "3.1080.0",
     "@aws-sdk/s3-request-presigner": "3.1080.0",
     "@trpc/server": "11.18.0",
-    "@zenstackhq/orm": "3.8.3",
-    "@zenstackhq/plugin-policy": "3.8.3",
-    "@zenstackhq/schema": "3.8.3",
-    "@zenstackhq/server": "3.8.3",
+    "@zenstackhq/orm": "3.9.1",
+    "@zenstackhq/plugin-policy": "3.9.1",
+    "@zenstackhq/schema": "3.9.1",
+    "@zenstackhq/server": "3.9.1",
     "axios": "1.18.1",
     "bcrypt": "6.0.0",
     "cors": "2.8.6",

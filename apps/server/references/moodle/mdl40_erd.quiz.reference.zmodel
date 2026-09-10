@@ -1,0 +1,932 @@
+
+
+plugin zenstackmd {
+  provider = 'zenstack-markdown'
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Auto-generated from mdl40_erd.mdl40_erd.xml by mdl40_erd.parse.py — do not edit by hand.
+// Faithful mirror of the Moodle 4.0 MySQL schema: one model per table, original
+// table/column names preserved. No access policies (documentation reference only).
+// Filtered to tables matching prefixes: quiz, quizaccess, question, qtype
+
+// Defines drag and drop (text or images onto a background imag
+model QtypeDdimageortext {
+  id                             BigInt   @id @default(autoincrement())
+  questionid                     BigInt   @default(0)
+  shuffleanswers                 Int      @default(1)
+  correctfeedback                String // Feedback shown for any correct response.
+  correctfeedbackformat          Int      @default(0)
+  partiallycorrectfeedback       String // Feedback shown for any partially correct response.
+  partiallycorrectfeedbackformat Int      @default(0)
+  incorrectfeedback              String // Feedback shown for any incorrect response.
+  incorrectfeedbackformat        Int      @default(0)
+  shownumcorrect                 Int      @default(0)
+
+  Question                       Question @relation(fields: [questionid], references: [id])
+
+  @@map("qtype_ddimageortext")
+}
+
+// Images to drag. Actual file names are not stored here we use
+model QtypeDdimageortextDrags {
+  id         BigInt   @id @default(autoincrement())
+  questionid BigInt   @default(0)
+  no         BigInt   @default(0) // drag no
+  draggroup  BigInt   @default(0)
+  infinite   Int      @default(0)
+  label      String // Alt text label for drag-able image.
+
+  Question   Question @relation(fields: [questionid], references: [id])
+
+  @@map("qtype_ddimageortext_drags")
+}
+
+// Drop boxes
+model QtypeDdimageortextDrops {
+  id         BigInt   @id @default(autoincrement())
+  questionid BigInt   @default(0)
+  no         BigInt   @default(0) // drop number
+  xleft      BigInt   @default(0)
+  ytop       BigInt   @default(0)
+  choice     BigInt   @default(0)
+  label      String // Alt label for drop box
+
+  Question   Question @relation(fields: [questionid], references: [id])
+
+  @@map("qtype_ddimageortext_drops")
+}
+
+// Defines drag and drop (text or images onto a background imag
+model QtypeDdmarker {
+  id                             BigInt   @id @default(autoincrement())
+  questionid                     BigInt   @default(0)
+  shuffleanswers                 Int      @default(1)
+  correctfeedback                String // Feedback shown for any correct response.
+  correctfeedbackformat          Int      @default(0)
+  partiallycorrectfeedback       String // Feedback shown for any partially correct response.
+  partiallycorrectfeedbackformat Int      @default(0)
+  incorrectfeedback              String // Feedback shown for any incorrect response.
+  incorrectfeedbackformat        Int      @default(0)
+  shownumcorrect                 Int      @default(0)
+  showmisplaced                  Int      @default(0)
+
+  Question                       Question @relation(fields: [questionid], references: [id])
+
+  @@map("qtype_ddmarker")
+}
+
+// Labels for markers to drag.
+model QtypeDdmarkerDrags {
+  id         BigInt   @id @default(autoincrement())
+  questionid BigInt   @default(0)
+  no         BigInt   @default(0) // drag no
+  label      String // Alt text label for drag-able image.
+  infinite   Int      @default(0)
+  noofdrags  BigInt   @default(1) // No of drag items, ignored if drag is infinite.
+
+  Question   Question @relation(fields: [questionid], references: [id])
+
+  @@map("qtype_ddmarker_drags")
+}
+
+// drop regions
+model QtypeDdmarkerDrops {
+  id         BigInt   @id @default(autoincrement())
+  questionid BigInt   @default(0)
+  no         BigInt   @default(0) // drop number
+  shape      String? // circle, rectangle, polygon
+  coords     String
+  choice     BigInt   @default(0)
+
+  Question   Question @relation(fields: [questionid], references: [id])
+
+  @@map("qtype_ddmarker_drops")
+}
+
+// Extra options for essay questions.
+model QtypeEssayOptions {
+  id                     BigInt   @id @default(autoincrement())
+  questionid             BigInt // Foreign key linking to the question table.
+  responseformat         String   @default("editor") // The type of input area students should be given for their response.
+  responserequired       Int      @default(1) // Nonzero if an online text response is optional
+  responsefieldlines     Int      @default(15) // Approximate height, in lines, of the input box the students should be given for their response.
+  minwordlimit           BigInt? // Minimum number of words
+  maxwordlimit           BigInt? // Maximum number of words
+  attachments            Int      @default(0) // Whether, and how many, attachments a student is allowed to include with their response. -1 means unlimited.
+  attachmentsrequired    Int      @default(0) // The number of attachments that should be required
+  graderinfo             String? // Information shown to people with permission to manually grade the question, when they are grading.
+  graderinfoformat       Int      @default(0) // The text format for graderinfo.
+  responsetemplate       String? // The template to pre-populate student's response field during attempt.
+  responsetemplateformat Int      @default(0) // The text format for responsetemplate.
+  maxbytes               BigInt   @default(0) // Maximum size of attached files in bytes.
+  filetypeslist          String? // What attachment file type a student is allowed to include with their response. * or empty means unlimited.
+
+  Question               Question @relation(fields: [questionid], references: [id])
+
+  @@map("qtype_essay_options")
+}
+
+// Defines the question-type specific options for matching ques
+model QtypeMatchOptions {
+  id                             BigInt   @id @default(autoincrement())
+  questionid                     BigInt   @default(0) // Foreign key link to question.id.
+  shuffleanswers                 Int      @default(1)
+  correctfeedback                String // Feedback shown for any correct response.
+  correctfeedbackformat          Int      @default(0)
+  partiallycorrectfeedback       String // Feedback shown for any partially correct response.
+  partiallycorrectfeedbackformat Int      @default(0)
+  incorrectfeedback              String // Feedback shown for any incorrect response.
+  incorrectfeedbackformat        Int      @default(0)
+  shownumcorrect                 Int      @default(0) // If true, then when the user gets the question partially correct, tell them how many choices they got correct alongside the feedback.
+
+  Question                       Question @relation(fields: [questionid], references: [id])
+
+  @@map("qtype_match_options")
+}
+
+// The subquestions that make up a matching question
+model QtypeMatchSubquestions {
+  id                 BigInt   @id @default(autoincrement())
+  questionid         BigInt   @default(0) // Foreign key link to question.id.
+  questiontext       String
+  questiontextformat Int      @default(0)
+  answertext         String   @default("")
+
+  Question           Question @relation(fields: [questionid], references: [id])
+
+  @@map("qtype_match_subquestions")
+}
+
+// Options for multiple choice questions
+model QtypeMultichoiceOptions {
+  id                             BigInt   @id @default(autoincrement())
+  questionid                     BigInt   @default(0) // Foreign key references question.id
+  layout                         Int      @default(0) // Not used. Was intended for a vertical/horizontal layout option. See MDL-18445.
+  single                         Int      @default(0) // If 0 it multiple response (checkboxes). Otherwise it is radio buttons.
+  shuffleanswers                 Int      @default(1) // Whether the choices can be randomly shuffled.
+  correctfeedback                String // Feedback shown for any correct response.
+  correctfeedbackformat          Int      @default(0)
+  partiallycorrectfeedback       String // Feedback shown for any partially correct response.
+  partiallycorrectfeedbackformat Int      @default(0)
+  incorrectfeedback              String // Feedback shown for any incorrect response.
+  incorrectfeedbackformat        Int      @default(0)
+  answernumbering                String   @default("abc") // Indicates how and whether the choices should be numbered.
+  shownumcorrect                 Int      @default(0) // If true, then when the user gets a multiple-response question partially correct, tell them how many choices they got correct alongside the feedback.
+  showstandardinstruction        Int      @default(1) // Whether standard instruction ('Select one:' or 'Select one or more:') is displayed
+
+  Question                       Question @relation(fields: [questionid], references: [id])
+
+  @@map("qtype_multichoice_options")
+}
+
+// Info about a random short-answer matching question
+model QtypeRandomsamatchOptions {
+  id                             BigInt   @id @default(autoincrement())
+  questionid                     BigInt   @default(0) // Foreign key references question.id.
+  choose                         BigInt   @default(4) // Number of subquestions to randomly generate.
+  subcats                        Int      @default(1) // Whether to include or not the subcategories.
+  correctfeedback                String // Feedback shown for any correct response.
+  correctfeedbackformat          Int      @default(0)
+  partiallycorrectfeedback       String // Feedback shown for any partially correct response.
+  partiallycorrectfeedbackformat Int      @default(0)
+  incorrectfeedback              String // Feedback shown for any incorrect response.
+  incorrectfeedbackformat        Int      @default(0)
+  shownumcorrect                 Int      @default(0) // If true, then when the user gets the question partially correct, tell them how many choices they got correct alongside the feedback.
+
+  Question                       Question @relation(fields: [questionid], references: [id])
+
+  @@map("qtype_randomsamatch_options")
+}
+
+// Options for short answer questions
+model QtypeShortanswerOptions {
+  id         BigInt   @id @default(autoincrement())
+  questionid BigInt   @default(0) // Foreign key references question.id.
+  usecase    Int      @default(0) // Whether answers are matched case-sensitively.
+
+  Question   Question @relation(fields: [questionid], references: [id])
+
+  @@map("qtype_shortanswer_options")
+}
+
+// This table stores the definition of one version of a questio
+model Question {
+  id                        BigInt                      @id @default(autoincrement())
+  parent                    BigInt                      @default(0)
+  name                      String                      @default("")
+  questiontext              String
+  questiontextformat        Int                         @default(0)
+  generalfeedback           String // to store the question feedback
+  generalfeedbackformat     Int                         @default(0)
+  defaultmark               Decimal                     @default(1.0)
+  penalty                   Decimal                     @default(0.3333333)
+  qtype                     String                      @default("")
+  length                    BigInt                      @default(1)
+  stamp                     String                      @default("")
+  timecreated               BigInt                      @default(0) // time question was created
+  timemodified              BigInt                      @default(0) // time that question was last modified
+  createdby                 BigInt? // userid of person who created this question
+  modifiedby                BigInt? // userid of person who last edited this question
+
+  Parent                    Question                    @relation(name: "question_parent", fields: [parent], references: [id])
+
+  QtypeDdimageortext        QtypeDdimageortext[]
+  QtypeDdimageortextDrags   QtypeDdimageortextDrags[]
+  QtypeDdimageortextDrops   QtypeDdimageortextDrops[]
+  QtypeDdmarker             QtypeDdmarker[]
+  QtypeDdmarkerDrags        QtypeDdmarkerDrags[]
+  QtypeDdmarkerDrops        QtypeDdmarkerDrops[]
+  QtypeEssayOptions         QtypeEssayOptions[]
+  QtypeMatchOptions         QtypeMatchOptions[]
+  QtypeMatchSubquestions    QtypeMatchSubquestions[]
+  QtypeMultichoiceOptions   QtypeMultichoiceOptions[]
+  QtypeRandomsamatchOptions QtypeRandomsamatchOptions[]
+  QtypeShortanswerOptions   QtypeShortanswerOptions[]
+  QuestionByParent          Question[]                  @relation(name: "question_parent")
+  QuestionAnswers           QuestionAnswers[]
+  QuestionAttempts          QuestionAttempts[]
+  QuestionCalculated        QuestionCalculated[]
+  QuestionCalculatedOptions QuestionCalculatedOptions[]
+  QuestionDatasets          QuestionDatasets[]
+  QuestionDdwtos            QuestionDdwtos[]
+  QuestionGapselect         QuestionGapselect[]
+  QuestionHints             QuestionHints[]
+  QuestionMultianswer       QuestionMultianswer[]
+  QuestionNumerical         QuestionNumerical[]
+  QuestionNumericalOptions  QuestionNumericalOptions[]
+  QuestionNumericalUnits    QuestionNumericalUnits[]
+  QuestionResponseAnalysis  QuestionResponseAnalysis[]
+  QuestionStatistics        QuestionStatistics[]
+  QuestionTruefalse         QuestionTruefalse[]
+  QuestionVersions          QuestionVersions[]
+
+  @@map("question")
+}
+
+// Answers, with a fractional grade (0-1) and feedback
+model QuestionAnswers {
+  id             BigInt   @id @default(autoincrement())
+  question       BigInt   @default(0)
+  answer         String
+  answerformat   Int      @default(0)
+  fraction       Decimal  @default(0.0)
+  feedback       String
+  feedbackformat Int      @default(0)
+
+  Question       Question @relation(fields: [question], references: [id])
+
+  @@map("question_answers")
+}
+
+// Each question_attempt_step has an associative array of the d
+model QuestionAttemptStepData {
+  id            BigInt               @id @default(autoincrement())
+  attemptstepid BigInt // Foreign key, references question_attempt_steps.id
+  name          String               @default("") // The name of this bit of data.
+  value         String? // The corresponding value
+
+  Attemptstep   QuestionAttemptSteps @relation(fields: [attemptstepid], references: [id])
+
+  @@map("question_attempt_step_data")
+}
+
+// Stores one step in in a question attempt. As well as the dat
+model QuestionAttemptSteps {
+  id                      BigInt                    @id @default(autoincrement())
+  questionattemptid       BigInt // Foreign key, references question_attempt.id
+  sequencenumber          BigInt // Numbers the steps in a question attempt sequentially.
+  state                   String                    @default("") // One of the constants defined by the question_state class, giving the state of the question at the end of this step.
+  fraction                Decimal? // The grade for this question, when graded out of 1. Needs to be multiplied by question_attempt.maxmark to get the actual mark for the question.
+  timecreated             BigInt // Time-stamp of the action that lead to this state being created.
+  userid                  BigInt? // The user whose action lead to this state being created.
+
+  Questionattempt         QuestionAttempts          @relation(fields: [questionattemptid], references: [id])
+
+  QuestionAttemptStepData QuestionAttemptStepData[]
+
+  @@map("question_attempt_steps")
+}
+
+// Each row here corresponds to an attempt at one question, as
+model QuestionAttempts {
+  id                                  BigInt                 @id @default(autoincrement())
+  questionusageid                     BigInt                 @unique // Foreign key, references question_usages.id
+  slot                                BigInt                 @unique // Used to number the questions in one attempt sequentially.
+  behaviour                           String                 @default("") // The name of the question behaviour that is managing this question attempt.
+  questionid                          BigInt // The id of the question being attempted. Foreign key references question.id.
+  variant                             BigInt                 @default(1) // The variant of the qusetion being used.
+  maxmark                             Decimal // The grade this question is marked out of in this attempt.
+  minfraction                         Decimal // Some questions can award negative marks. This indicates the most negative mark that can be awarded, on the faction scale where the maximum positive mark is 1.
+  maxfraction                         Decimal                @default(1.0) // Some questions can give fractions greater than 1. This indicates the greatest fraction that can be awarded.
+  flagged                             Boolean                @default(false) // Whether this question has been flagged within the attempt.
+  questionsummary                     String? // If this question uses randomisation, it should set this field to summarise what random version the student actually saw. This is a human-readable textual summary of the student's response which might, for example, be used in a report.
+  rightanswer                         String? // This is a human-readable textual summary of the right answer to this question. Might be used, for example on the quiz preview, to help people who are testing the question. Or might be used in reports.
+  responsesummary                     String? // This is a textual summary of the student's response (basically what you would expect to in the Quiz responses report).
+  timemodified                        BigInt // The time this record was last changed.
+
+  Questionusage                       QuestionUsages         @relation(fields: [questionusageid], references: [id])
+  Question                            Question               @relation(fields: [questionid], references: [id])
+
+  QuestionAttemptSteps                QuestionAttemptSteps[]
+  QuizOverviewRegradesByQuestionusage QuizOverviewRegrades[] @relation(name: "quiz_overview_regrades_questionusageid")
+  QuizOverviewRegradesBySlot          QuizOverviewRegrades[] @relation(name: "quiz_overview_regrades_slot")
+
+  @@map("question_attempts")
+}
+
+// Each question bank entry. This table has one row for each qu
+model QuestionBankEntries {
+  id                 BigInt               @id @default(autoincrement())
+  questioncategoryid BigInt               @default(0) // ID of the category this question is part of.
+  idnumber           String? // Unique identifier, useful especially for mapping to external entities.
+  ownerid            BigInt? // userid of person who owns this question bank entry.
+
+  Questioncategory   QuestionCategories   @relation(fields: [questioncategoryid], references: [id])
+
+  QuestionReferences QuestionReferences[]
+  QuestionVersions   QuestionVersions[]
+
+  @@map("question_bank_entries")
+}
+
+// Options for questions of type calculated
+model QuestionCalculated {
+  id                  BigInt   @id @default(autoincrement())
+  question            BigInt   @default(0)
+  answer              BigInt   @default(0)
+  tolerance           String   @default("0.0")
+  tolerancetype       BigInt   @default(1)
+  correctanswerlength BigInt   @default(2)
+  correctanswerformat BigInt   @default(2)
+
+  Question            Question @relation(fields: [question], references: [id])
+
+  @@map("question_calculated")
+}
+
+// Options for questions of type calculated
+model QuestionCalculatedOptions {
+  id                             BigInt   @id @default(autoincrement())
+  question                       BigInt   @default(0)
+  synchronize                    Int      @default(0)
+  single                         Int      @default(0) // If 0 it multiple response (checkboxes). Otherwise it is radio buttons.
+  shuffleanswers                 Int      @default(0) // Whether the choices can be randomly shuffled.
+  correctfeedback                String? // Feedback shown for any correct response.
+  correctfeedbackformat          Int      @default(0)
+  partiallycorrectfeedback       String? // Feedback shown for any partially correct response.
+  partiallycorrectfeedbackformat Int      @default(0)
+  incorrectfeedback              String? // Feedback shown for any incorrect response.
+  incorrectfeedbackformat        Int      @default(0)
+  answernumbering                String   @default("abc") // Indicates how and whether the choices should be numbered.
+  shownumcorrect                 Int      @default(0) // If true, then when the user gets a multiple-response question partially correct, tell them how many choices they got correct alongside the feedback.
+
+  Question                       Question @relation(fields: [question], references: [id])
+
+  @@map("question_calculated_options")
+}
+
+// Categories are for grouping questions
+model QuestionCategories {
+  id                         BigInt                       @id @default(autoincrement())
+  name                       String                       @default("")
+  contextid                  BigInt                       @default(0) // context that this category is shared in
+  info                       String
+  infoformat                 Int                          @default(0)
+  stamp                      String                       @default("")
+  parent                     BigInt                       @default(0)
+  sortorder                  BigInt                       @default(999)
+  idnumber                   String?
+
+  Parent                     QuestionCategories           @relation(name: "question_categories_parent", fields: [parent], references: [id])
+
+  QuestionBankEntries        QuestionBankEntries[]
+  QuestionCategoriesByParent QuestionCategories[]         @relation(name: "question_categories_parent")
+  QuestionDatasetDefinitions QuestionDatasetDefinitions[]
+
+  @@map("question_categories")
+}
+
+// Organises and stores properties for dataset items
+model QuestionDatasetDefinitions {
+  id               BigInt             @id @default(autoincrement())
+  category         BigInt             @default(0)
+  name             String             @default("")
+  type             BigInt             @default(0)
+  options          String             @default("")
+  itemcount        BigInt             @default(0)
+
+  Category         QuestionCategories @relation(fields: [category], references: [id])
+
+  QuestionDatasets QuestionDatasets[]
+
+  @@map("question_dataset_definitions")
+}
+
+// Individual dataset items
+model QuestionDatasetItems {
+  id         BigInt @id @default(autoincrement())
+  definition BigInt @default(0)
+  itemnumber BigInt @default(0)
+  value      String @default("")
+
+  @@map("question_dataset_items")
+}
+
+// Many-many relation between questions and dataset definitions
+model QuestionDatasets {
+  id                BigInt                     @id @default(autoincrement())
+  question          BigInt                     @default(0)
+  datasetdefinition BigInt                     @default(0)
+
+  Question          Question                   @relation(fields: [question], references: [id])
+  Datasetdefinition QuestionDatasetDefinitions @relation(fields: [datasetdefinition], references: [id])
+
+  @@map("question_datasets")
+}
+
+// Defines drag and drop (words into sentences) questions
+model QuestionDdwtos {
+  id                             BigInt   @id @default(autoincrement())
+  questionid                     BigInt   @default(0)
+  shuffleanswers                 Int      @default(1)
+  correctfeedback                String // Feedback shown for any correct response.
+  correctfeedbackformat          Int      @default(0)
+  partiallycorrectfeedback       String // Feedback shown for any partially correct response.
+  partiallycorrectfeedbackformat Int      @default(0)
+  incorrectfeedback              String // Feedback shown for any incorrect response.
+  incorrectfeedbackformat        Int      @default(0)
+  shownumcorrect                 Int      @default(0)
+
+  Question                       Question @relation(fields: [questionid], references: [id])
+
+  @@map("question_ddwtos")
+}
+
+// Defines select missing words questions
+model QuestionGapselect {
+  id                             BigInt   @id @default(autoincrement())
+  questionid                     BigInt   @default(0)
+  shuffleanswers                 Int      @default(1)
+  correctfeedback                String // Feedback shown for any correct response.
+  correctfeedbackformat          Int      @default(0)
+  partiallycorrectfeedback       String // Feedback shown for any partially correct response.
+  partiallycorrectfeedbackformat Int      @default(0)
+  incorrectfeedback              String // Feedback shown for any incorrect response.
+  incorrectfeedbackformat        Int      @default(0)
+  shownumcorrect                 Int      @default(0)
+
+  Question                       Question @relation(fields: [questionid], references: [id])
+
+  @@map("question_gapselect")
+}
+
+// Stores the the part of the question definition that gives di
+model QuestionHints {
+  id             BigInt   @id @default(autoincrement())
+  questionid     BigInt
+  hint           String // The text of the feedback to be given.
+  hintformat     Int      @default(0) // The format of the hint.
+  shownumcorrect Boolean? // Whether the feedback should include a message about how many things the student got right. This is only applicable to certain question types (for example matching or multiple choice multiple-response).
+  clearwrong     Boolean? // Whether any wrong choices should be cleared before the next try. Whether this is applicable, and what it means, depends on the question type, as with the shownumright option.
+  options        String? // A space for any other question-type specific options.
+
+  Question       Question @relation(fields: [questionid], references: [id])
+
+  @@map("question_hints")
+}
+
+// Options for multianswer questions
+model QuestionMultianswer {
+  id       BigInt   @id @default(autoincrement())
+  question BigInt   @default(0)
+  sequence String
+
+  Question Question @relation(fields: [question], references: [id])
+
+  @@map("question_multianswer")
+}
+
+// Options for numerical questions.
+model QuestionNumerical {
+  id        BigInt   @id @default(autoincrement())
+  question  BigInt   @default(0) // Redundant, because of the answer field. Foreign key references question.id.
+  answer    BigInt   @default(0) // Foreign key references question_answers.id.
+  tolerance String   @default("0.0") // Allowed error when matching a response to this answer. I don't know why this is stored as a string.
+
+  Question  Question @relation(fields: [question], references: [id])
+
+  @@map("question_numerical")
+}
+
+// Options for questions of type numerical This table is also u
+model QuestionNumericalOptions {
+  id              BigInt   @id @default(autoincrement())
+  question        BigInt   @default(0)
+  showunits       Int      @default(0) // How units are handled: 3) Not used at all, 0) Optional, or 1) must be right or penalty applied.
+  unitsleft       Int      @default(0) // display the unit at left as in $1.00
+  unitgradingtype Int      @default(0) // 0 no penalty, 1 fraction response grade, 2 fraction total grade
+  unitpenalty     Decimal  @default(0.1) // Penalty for getting the unit wrong, when they are being graded.
+
+  Question        Question @relation(fields: [question], references: [id])
+
+  @@map("question_numerical_options")
+}
+
+// Optional unit options for numerical questions. This table is
+model QuestionNumericalUnits {
+  id         BigInt   @id @default(autoincrement())
+  question   BigInt   @default(0) // Foreign key references question.id
+  multiplier Decimal  @default(1.0) // The multiplier for this unit. For example, if the first unit is (1.0, 'cm'), another unit might be (0.1, 'mm') or (100.0, 'm').
+  unit       String   @default("") // The unit. For example 'm' or 'kg'.
+
+  Question   Question @relation(fields: [question], references: [id])
+
+  @@map("question_numerical_units")
+}
+
+// Records where a specific question is used.
+model QuestionReferences {
+  id                  BigInt              @id @default(autoincrement())
+  usingcontextid      BigInt              @default(0) // Context where question is used.
+  component           String? // Component (e.g. mod_quiz or core_question)
+  questionarea        String? // Depending on the component, which area the question is used in (e.g. slot for quiz).
+  itemid              BigInt? // Plugin specific id (e.g. slotid for quiz) where its used.
+  questionbankentryid BigInt              @default(0) // ID of the question bank entry this question is part of.
+  version             BigInt? // Version number for the question where NULL means use the latest ready version.
+
+  Questionbankentry   QuestionBankEntries @relation(fields: [questionbankentryid], references: [id])
+
+  @@map("question_references")
+}
+
+// Analysis of student responses given to questions.
+model QuestionResponseAnalysis {
+  id                    BigInt                  @id @default(autoincrement())
+  hashcode              String                  @default("") // sha1 hash of serialized qubaids_condition class. Unique for every combination of class name and property.
+  whichtries            String                  @default("")
+  timemodified          BigInt
+  questionid            BigInt
+  variant               BigInt?
+  subqid                String                  @default("")
+  aid                   String?
+  response              String?
+  credit                Decimal
+
+  Question              Question                @relation(fields: [questionid], references: [id])
+
+  QuestionResponseCount QuestionResponseCount[]
+
+  @@map("question_response_analysis")
+}
+
+// Count for each responses for each try at a question.
+model QuestionResponseCount {
+  id         BigInt                   @id @default(autoincrement())
+  analysisid BigInt
+  try        BigInt
+  rcount     BigInt
+
+  Analysis   QuestionResponseAnalysis @relation(fields: [analysisid], references: [id])
+
+  @@map("question_response_count")
+}
+
+// Records where groups of questions are used.
+model QuestionSetReferences {
+  id                 BigInt  @id @default(autoincrement())
+  usingcontextid     BigInt  @default(0) // Context where question is used.
+  component          String? // Component (e.g. mod_quiz)
+  questionarea       String? // Depending on the component, which area the question is used in (e.g. slot for quiz).
+  itemid             BigInt? // Plugin specific id (e.g. slotid for quiz) where its used.
+  questionscontextid BigInt  @default(0) // Context questions come from.
+  filtercondition    String? // Filter expression in json format
+
+  @@map("question_set_references")
+}
+
+// Statistics for individual questions used in an activity.
+model QuestionStatistics {
+  id                       BigInt   @id @default(autoincrement())
+  hashcode                 String   @default("") // sha1 hash of serialized qubaids_condition class. Unique for every combination of class name and property.
+  timemodified             BigInt
+  questionid               BigInt
+  slot                     BigInt? // The position in the quiz where this question appears
+  subquestion              Int
+  variant                  BigInt?
+  s                        BigInt   @default(0)
+  effectiveweight          Decimal?
+  negcovar                 Int      @default(0)
+  discriminationindex      Decimal?
+  discriminativeefficiency Decimal?
+  sd                       Decimal?
+  facility                 Decimal?
+  subquestions             String?
+  maxmark                  Decimal?
+  positions                String? // positions in which this item appears. Only used for random questions.
+  randomguessscore         Decimal? // An estimate of the score a student would get by guessing randomly.
+
+  Question                 Question @relation(fields: [questionid], references: [id])
+
+  @@map("question_statistics")
+}
+
+// Options for True-False questions
+model QuestionTruefalse {
+  id          BigInt   @id @default(autoincrement())
+  question    BigInt   @default(0) // Foreign key references question.id.
+  trueanswer  BigInt   @default(0) // Foreign key references question_answers.id. The 'True' choice.
+  falseanswer BigInt   @default(0) // Foreign key references question_answers.id. The 'False' choice.
+
+  Question    Question @relation(fields: [question], references: [id])
+
+  @@map("question_truefalse")
+}
+
+// This table's main purpose it to assign a unique id to each a
+model QuestionUsages {
+  id                 BigInt             @id @default(autoincrement())
+  contextid          BigInt // Every question usage must be associated with some context.
+  component          String             @default("") // The plugin this attempt belongs to, e.g. 'mod_quiz', 'block_questionoftheday', 'filter_embedquestion'.
+  preferredbehaviour String             @default("") // The archetypal behaviour that should be used for question attempts in this usage.
+
+  QuestionAttempts   QuestionAttempts[]
+  QuizAttempts       QuizAttempts[]
+
+  @@map("question_usages")
+}
+
+// A join table linking the different question version definiti
+model QuestionVersions {
+  id                  BigInt              @id @default(autoincrement())
+  questionbankentryid BigInt              @default(0) // ID of the question bank entry this question version is part of.
+  version             BigInt              @default(1) // Version number for the question where the first version is always 1.
+  questionid          BigInt              @default(0) // The question ID.
+  status              String              @default("ready") // If the question is ready, hidden or draft
+
+  Questionbankentry   QuestionBankEntries @relation(fields: [questionbankentryid], references: [id])
+  Question            Question            @relation(fields: [questionid], references: [id])
+
+  @@map("question_versions")
+}
+
+// The settings for each quiz.
+model Quiz {
+  id                          BigInt                      @id @default(autoincrement()) // Standard Moodle primary key.
+  course                      BigInt                      @default(0) // Foreign key reference to the course this quiz is part of.
+  name                        String                      @default("") // Quiz name.
+  intro                       String // Quiz introduction text.
+  introformat                 Int                         @default(0) // Quiz intro text format.
+  timeopen                    BigInt                      @default(0) // The time when this quiz opens. (0 = no restriction.)
+  timeclose                   BigInt                      @default(0) // The time when this quiz closes. (0 = no restriction.)
+  timelimit                   BigInt                      @default(0) // The time limit for quiz attempts, in seconds.
+  overduehandling             String                      @default("autoabandon") // The method used to handle overdue attempts. 'autosubmit', 'graceperiod' or 'autoabandon'.
+  graceperiod                 BigInt                      @default(0) // The amount of time (in seconds) after the time limit runs out during which attempts can still be submitted, if overduehandling is set to allow it.
+  preferredbehaviour          String                      @default("") // The behaviour to ask questions to use.
+  canredoquestions            Int                         @default(0) // Allows students to redo any completed question within a quiz attempt.
+  attempts                    Int                         @default(0) // The maximum number of attempts a student is allowed.
+  attemptonlast               Int                         @default(0) // Whether subsequent attempts start from teh answer to the previous attempt (1) or start blank (0).
+  grademethod                 Int                         @default(1) // One of the values QUIZ_GRADEHIGHEST, QUIZ_GRADEAVERAGE, QUIZ_ATTEMPTFIRST or QUIZ_ATTEMPTLAST.
+  decimalpoints               Int                         @default(2) // Number of decimal points to use when displaying grades.
+  questiondecimalpoints       Int                         @default(-1) // Number of decimal points to use when displaying question grades. (-1 means use decimalpoints.)
+  reviewattempt               Int                         @default(0) // Whether users are allowed to review their quiz attempts at various times. This is a bit field, decoded by the mod_quiz_display_options class. It is formed by ORing together the constants defined there.
+  reviewcorrectness           Int                         @default(0) // Whether users are allowed to review their quiz attempts at various times. A bit field, like reviewattempt.
+  reviewmarks                 Int                         @default(0) // Whether users are allowed to review their quiz attempts at various times. A bit field, like reviewattempt.
+  reviewspecificfeedback      Int                         @default(0) // Whether users are allowed to review their quiz attempts at various times. A bit field, like reviewattempt.
+  reviewgeneralfeedback       Int                         @default(0) // Whether users are allowed to review their quiz attempts at various times. A bit field, like reviewattempt.
+  reviewrightanswer           Int                         @default(0) // Whether users are allowed to review their quiz attempts at various times. A bit field, like reviewattempt.
+  reviewoverallfeedback       Int                         @default(0) // Whether users are allowed to review their quiz attempts at various times. A bit field, like reviewattempt.
+  questionsperpage            BigInt                      @default(0) // How often to insert a page break when editing the quiz, or when shuffling the question order.
+  navmethod                   String                      @default("free") // Any constraints on how the user is allowed to navigate around the quiz. Currently recognised values are 'free' and 'seq'.
+  shuffleanswers              Int                         @default(0) // Whether the parts of the question should be shuffled, in those question types that support it.
+  sumgrades                   Decimal                     @default(0.0) // The total of all the question instance maxmarks.
+  grade                       Decimal                     @default(0.0) // The total that the quiz overall grade is scaled to be out of.
+  timecreated                 BigInt                      @default(0) // The time when the quiz was added to the course.
+  timemodified                BigInt                      @default(0) // Last modified time.
+  password                    String                      @default("") // A password that the student must enter before starting or continuing a quiz attempt.
+  subnet                      String                      @default("") // Used to restrict the IP addresses from which this quiz can be attempted. The format is as requried by the address_in_subnet function.
+  browsersecurity             String                      @default("") // Restriciton on the browser the student must use. E.g. 'securewindow'.
+  delay1                      BigInt                      @default(0) // Delay that must be left between the first and second attempt, in seconds.
+  delay2                      BigInt                      @default(0) // Delay that must be left between the second and subsequent attempt, in seconds.
+  showuserpicture             Int                         @default(0) // Option to show the user's picture during the attempt and on the review page.
+  showblocks                  Int                         @default(0) // Whether blocks should be shown on the attempt.php and review.php pages.
+  completionattemptsexhausted Boolean?                    @default(false)
+  completionminattempts       BigInt                      @default(0)
+  allowofflineattempts        Boolean?                    @default(false) // Whether to allow the quiz to be attempted offline in the mobile app
+
+  QuizAttempts                QuizAttempts[]
+  QuizFeedback                QuizFeedback[]
+  QuizGrades                  QuizGrades[]
+  QuizOverrides               QuizOverrides[]
+  QuizSections                QuizSections[]
+  QuizSlots                   QuizSlots[]
+  QuizaccessSebQuizsettings   QuizaccessSebQuizsettings[]
+
+  @@map("quiz")
+}
+
+// Stores users attempts at quizzes.
+model QuizAttempts {
+  id                         BigInt         @id @default(autoincrement()) // Standard Moodle primary key.
+  quiz                       BigInt         @default(0) // Foreign key reference to the quiz that was attempted.
+  userid                     BigInt         @default(0) // Foreign key reference to the user whose attempt this is.
+  attempt                    Int            @default(0) // Sequentially numbers this student's attempts at this quiz.
+  uniqueid                   BigInt         @default(0) // Foreign key reference to the question_usage that holds the details of the the question_attempts that make up this quiz attempt.
+  layout                     String
+  currentpage                BigInt         @default(0)
+  preview                    Int            @default(0)
+  state                      String         @default("inprogress") // The current state of the attempts. 'inprogress', 'overdue', 'finished' or 'abandoned'.
+  timestart                  BigInt         @default(0) // Time when the attempt was started.
+  timefinish                 BigInt         @default(0) // Time when the attempt was submitted. 0 if the attempt has not been submitted yet.
+  timemodified               BigInt         @default(0) // Last modified time.
+  timemodifiedoffline        BigInt         @default(0) // Last modified time via web services.
+  timecheckstate             BigInt?        @default(0) // Next time quiz cron should check attempt for state changes. NULL means never check.
+  sumgrades                  Decimal? // Total marks for this attempt.
+  gradednotificationsenttime BigInt? // The timestamp when the 'graded' notification was sent.
+
+  Quiz                       Quiz           @relation(fields: [quiz], references: [id])
+  Unique                     QuestionUsages @relation(fields: [uniqueid], references: [id])
+
+  @@map("quiz_attempts")
+}
+
+// Feedback given to students based on which grade band their o
+model QuizFeedback {
+  id                 BigInt  @id @default(autoincrement())
+  quizid             BigInt  @default(0) // Foreign key references quiz.id.
+  feedbacktext       String // The feedback to show for a attempt where mingrade &lt;= attempt grade &lt; maxgrade. See function quiz_feedback_for_grade in mod/quiz/locallib.php.
+  feedbacktextformat Int     @default(0)
+  mingrade           Decimal @default(0.0) // The lower limit of this grade band. Inclusive.
+  maxgrade           Decimal @default(0.0) // The upper limit of this grade band. Exclusive.
+
+  Quiz               Quiz    @relation(fields: [quizid], references: [id])
+
+  @@map("quiz_feedback")
+}
+
+// Stores the overall grade for each user on the quiz, based on
+model QuizGrades {
+  id           BigInt  @id @default(autoincrement())
+  quiz         BigInt  @default(0) // Foreign key references quiz.id.
+  userid       BigInt  @default(0) // Foreign key references user.id.
+  grade        Decimal @default(0.0) // The overall grade from the quiz. Not affected by overrides in the gradebook.
+  timemodified BigInt  @default(0) // The last time this grade changed.
+
+  Quiz         Quiz    @relation(fields: [quiz], references: [id])
+
+  @@map("quiz_grades")
+}
+
+// The overrides to quiz settings on a per-user and per-group b
+model QuizOverrides {
+  id        BigInt  @id @default(autoincrement())
+  quiz      BigInt  @default(0) // Foreign key references quiz.id
+  groupid   BigInt? // Foreign key references groups.id. Can be null if this is a per-user override.
+  userid    BigInt? // Foreign key references user.id. Can be null if this is a per-group override.
+  timeopen  BigInt? // Time at which students may start attempting this quiz. Can be null, in which case the quiz default is used.
+  timeclose BigInt? // Time by which students must have completed their attempt. Can be null, in which case the quiz default is used.
+  timelimit BigInt? // Time limit in seconds. Can be null, in which case the quiz default is used.
+  attempts  Int?
+  password  String? // Quiz password. Can be null, in which case the quiz default is used.
+
+  Quiz      Quiz    @relation(fields: [quiz], references: [id])
+
+  @@map("quiz_overrides")
+}
+
+// This table records which question attempts need regrading an
+model QuizOverviewRegrades {
+  id              BigInt           @id @default(autoincrement())
+  questionusageid BigInt // Foreign key references question_usages.id, or equivalently quiz_attempt.uniqueid.
+  slot            BigInt // Foreign key, references question_attempts.slot
+  newfraction     Decimal? // The new fraction for this question_attempt after regrading.
+  oldfraction     Decimal? // The previous fraction for this question_attempt.
+  regraded        Int // set to 0 if element has just been regraded. Set to 1 if element has been marked as needing regrading.
+  timemodified    BigInt // Timestamp of when this row was last modified.
+
+  Questionusage   QuestionAttempts @relation(name: "quiz_overview_regrades_questionusageid", fields: [questionusageid], references: [questionusageid])
+  Slot            QuestionAttempts @relation(name: "quiz_overview_regrades_slot", fields: [slot], references: [slot])
+
+  @@map("quiz_overview_regrades")
+}
+
+// Lists all the installed quiz reports and their display order
+model QuizReports {
+  id           BigInt  @id @default(autoincrement())
+  name         String? // name of the report, same as the directory name
+  displayorder BigInt // display order for report tabs
+  capability   String? // Capability required to see this report. May be blank which means use the default of mod/quiz:viewreport. This is used when deciding which tabs to render.
+
+  @@map("quiz_reports")
+}
+
+// Stores sections of a quiz with section name (heading), from
+model QuizSections {
+  id               BigInt  @id @default(autoincrement())
+  quizid           BigInt // Foreign key references quiz.id.
+  firstslot        BigInt // Number of the first slot in the section. The section runs from here to the start of the next section, or the end of the quiz.
+  heading          String? // The text of the heading. May be an empty string/null. Multilang format.
+  shufflequestions Int     @default(0) // Whether the question order within this section should be shuffled for each attempt.
+
+  Quiz             Quiz    @relation(fields: [quizid], references: [id])
+
+  @@map("quiz_sections")
+}
+
+// Stores the question used in a quiz, with the order, and for
+model QuizSlots {
+  id              BigInt  @id @default(autoincrement())
+  slot            BigInt // Where this question comes in order in the list of questions in this quiz. Like question_attempts.slot.
+  quizid          BigInt  @default(0) // Foreign key references quiz.id.
+  page            BigInt // The page number that this questions appears on. If the question in slot n appears on page p, then the question in slot n+1 must appear on page p or p+1. Well, except that when a quiz is being created, there may be empty pages, which would cause the page number to jump here.
+  requireprevious Int     @default(0) // Set to 1 when current question requires previous one to be answered first.
+  maxmark         Decimal @default(0.0) // How many marks this question contributes to quiz.sumgrades.
+
+  Quiz            Quiz    @relation(fields: [quizid], references: [id])
+
+  @@map("quiz_slots")
+}
+
+// table to cache results from analysis done in statistics repo
+model QuizStatistics {
+  id                   BigInt   @id @default(autoincrement())
+  hashcode             String   @default("") // sha1 hash of serialized qubaids_condition class. Unique for every combination of class name and property.
+  whichattempts        Int // bool used to indicate whether these stats are for all attempts or just for the first.
+  timemodified         BigInt
+  firstattemptscount   BigInt
+  highestattemptscount BigInt
+  lastattemptscount    BigInt
+  allattemptscount     BigInt
+  firstattemptsavg     Decimal?
+  highestattemptsavg   Decimal?
+  lastattemptsavg      Decimal?
+  allattemptsavg       Decimal?
+  median               Decimal?
+  standarddeviation    Decimal?
+  skewness             Decimal?
+  kurtosis             Decimal?
+  cic                  Decimal?
+  errorratio           Decimal?
+  standarderror        Decimal?
+
+  @@map("quiz_statistics")
+}
+
+// Stores the quiz level Safe Exam Browser configuration.
+model QuizaccessSebQuizsettings {
+  id                     BigInt                @id @default(autoincrement())
+  quizid                 BigInt // Foreign key to quiz id.
+  cmid                   BigInt // Foreign key to course module id.
+  templateid             BigInt // Foreign key to quizaccess_seb_template.id.
+  requiresafeexambrowser Boolean // Bool whether to require SEB.
+  showsebtaskbar         Boolean? // Bool to show SEB task bar
+  showwificontrol        Boolean? // Bool to allow user to control networking.
+  showreloadbutton       Boolean? // Bool to show reload button.
+  showtime               Boolean? // Bool to show the clock.
+  showkeyboardlayout     Boolean? // Bool to show keyboard layout.
+  allowuserquitseb       Boolean? // Bool to show quit button.
+  quitpassword           String? // Quit password to exit SEB.
+  linkquitseb            String? // Link to exit SEB.
+  userconfirmquit        Boolean? // Bool whether confirm quit popup should appear.
+  enableaudiocontrol     Boolean? // Bool to show volume and audio controls.
+  muteonstartup          Boolean? // Bool whether browser starts muted.
+  allowspellchecking     Boolean? // Bool whether spell checking will happen in SEB.
+  allowreloadinexam      Boolean? // Bool whether user can reload.
+  activateurlfiltering   Boolean? // Bool whether URLs will be filtered.
+  filterembeddedcontent  Boolean? // Bool wither embedded content will be filtered
+  expressionsallowed     String? // Comma or newline separated list of allowed expressions
+  regexallowed           String? // Regex of allowed URLs
+  expressionsblocked     String? // Comma or newline separated list of blocked expressions
+  regexblocked           String? // Regex of blocked URLs
+  allowedbrowserexamkeys String? // List of allowed browser exam keys.
+  showsebdownloadlink    Boolean? // Bool whether SEB download link should appear
+  usermodified           BigInt                @default(0)
+  timecreated            BigInt                @default(0)
+  timemodified           BigInt                @default(0)
+
+  Quiz                   Quiz                  @relation(fields: [quizid], references: [id])
+  Template               QuizaccessSebTemplate @relation(fields: [templateid], references: [id])
+
+  @@map("quizaccess_seb_quizsettings")
+}
+
+// Templates for Safe Exam Browser configuration.
+model QuizaccessSebTemplate {
+  id                        BigInt                      @id @default(autoincrement())
+  name                      String                      @default("") // Name of the template
+  description               String
+  content                   String // Content of the template
+  enabled                   Boolean
+  sortorder                 BigInt
+  usermodified              BigInt                      @default(0)
+  timecreated               BigInt                      @default(0)
+  timemodified              BigInt                      @default(0)
+
+  QuizaccessSebQuizsettings QuizaccessSebQuizsettings[]
+
+  @@map("quizaccess_seb_template")
+}

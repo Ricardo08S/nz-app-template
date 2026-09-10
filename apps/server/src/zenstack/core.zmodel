@@ -1,7 +1,7 @@
 import './app'
 
 type ID {
-  id String @id @default(nanoid())
+  id String @id @default(cuid())
 }
 
 type Timestamps {
@@ -13,9 +13,13 @@ type Base with ID, Timestamps {
 }
 
 type AuthInfo {
-  id       String
-  username String
-  role     Role
+  id          String
+  username    String
+  role        Role
+  name        String?
+  email       String?
+  image       String?
+  permissions String[]
 
   @@auth
 }
@@ -25,44 +29,58 @@ enum Role {
   USER
 }
 
+model RolePermission {
+  role        Role     @id
+  permissions String[]
+}
+
+model User with Base {
+  username             String                 @unique
+  passwordHash         String                 @allow('all', auth().id == id || auth().role == ADMIN)
+  name                 String
+  email                String?
+  role                 Role
+  permissions          String[]               @default([])
+
+  oidc_issuer          String?                @allow('all', auth().id == id || auth().role == ADMIN)
+  oidc_userInfo        Json?                  @allow('all', auth().id == id || auth().role == ADMIN)
+  oidc_sub             String?                @unique
+
+  RefreshToken         RefreshToken[]
+  File                 File[]
+  QuizAttempt          QuizAttempt[]
+  ClassMember          ClassMember[]
+  AssignmentSubmission AssignmentSubmission[]
+  AssessmentScore      AssessmentScore[]
+  ClassContentComment  ClassContentComment[]
+  Report               Report[]
+
+  @@allow('read', true)
+  @@allow('create', auth().role == ADMIN)
+  @@allow('all', auth().id == id || auth().role == ADMIN)
+}
+
 enum FileStatus {
   PENDING
   UPLOADED
   FAILED
 }
 
-model User with Base {
-  username      String         @unique
-  passwordHash  String
-  name          String
-  email         String?
-  role          Role
-
-  oidc_issuer   String?
-  oidc_userInfo Json?
-  oidc_sub      String?        @unique
-
-  RefreshToken  RefreshToken[]
-  File          File[]
-  Post          Post[]
-
-  @@allow('read', true)
-  @@allow('all', auth().id == id)
-}
-
 model File with Timestamps {
-  key              String     @id
+  key                  String                 @id
 
-  userId           String
-  User             User       @relation(fields: [userId], references: [id])
+  userId               String
+  User                 User                   @relation(fields: [userId], references: [id])
 
-  originalFilename String
-  filename         String
-  contentType      String
-  size             Int?
-  status           FileStatus
+  originalFilename     String
+  filename             String
+  contentType          String
+  size                 Int?
+  status               FileStatus
 
-  Post             Post[]
+  AssignmentSubmission AssignmentSubmission[]
+  Report               Report[]
+  ClassAsset           ClassAsset[]
 
   @@allow('read', true)
   @@allow('all', auth().id == userId)

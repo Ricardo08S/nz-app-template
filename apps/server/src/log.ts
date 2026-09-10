@@ -35,6 +35,18 @@ const lokiLogger = createLokiLogger({
   appEnv: env.APP_ENV,
 });
 
+export const logError = (message: string, error: unknown) => {
+  const payload = {
+    message,
+    error: error instanceof Error ? (error.stack ?? error.message) : error,
+  };
+  if (lokiLogger) {
+    lokiLogger.log({ level: "error", message: JSON.stringify(payload) });
+  } else {
+    console.error(message, payload.error);
+  }
+};
+
 export const createLog = (context?: { requestHeaders?: JsonObject }) => {
   const log = new Logger<ILogObj>({
     name: env.APP_NAME,

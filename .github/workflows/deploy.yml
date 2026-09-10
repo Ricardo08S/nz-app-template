@@ -11,6 +11,12 @@ on:
       - apps/web/**
       - deploy/**
       - .github/workflows/**
+  workflow_dispatch:
+    inputs:
+      confirm_migrations:
+        description: "Apply pending migrations (deploy.sh aborts otherwise if any exist)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -39,11 +45,7 @@ jobs:
           # single-commit clone, or that diff would fail outright.
           fetch-depth: 0
 
-      # server.sops.yaml references $POSTGRES_PASSWORD (from infra.sops.yaml)
-      # and $APP_NAME/$BASE_DOMAIN (from deploy/env/production.env) — these
-      # only resolve if all three land in the same .env, because
-      # dotenv-expand (apps/server/src/env.ts) resolves $VAR against
-      # whatever else it just loaded from that one file, not across files.
+      # Merged into one .env so dotenv-expand can resolve $POSTGRES_PASSWORD/$APP_NAME/$BASE_DOMAIN across files.
       - name: Decrypt and merge secrets
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
@@ -82,6 +84,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Blue-green deploy
+        env:
+          CONFIRM_MIGRATIONS: ${{ github.event.inputs.confirm_migrations || 'false' }}
         run: |
           bash deploy/deploy.sh \
             "${{ env.APP_ENV }}" \

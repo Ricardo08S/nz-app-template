@@ -61,11 +61,11 @@ export const hashPassword = (password: string): string => {
   return bcrypt.hashSync(password, SALT_ROUNDS);
 };
 
-/** oidc_userInfo is untyped Json — narrow the one field we actually use. */
-const oidcPicture = (userInfo: unknown): string | undefined => {
+/** oidc_userInfo is untyped Json - narrow the one field we actually use. */
+export const oidcPicture = (userInfo: unknown): string | undefined => {
   if (
-    userInfo &&
     typeof userInfo === "object" &&
+    userInfo !== null &&
     "picture" in userInfo &&
     typeof userInfo.picture === "string"
   ) {
@@ -74,7 +74,20 @@ const oidcPicture = (userInfo: unknown): string | undefined => {
   return undefined;
 };
 
+// Was `new Set(...a, ...b)` - Set's constructor takes one iterable, not
+// variadic args, so every element past the first became a stray extra
+// constructor arg (silently ignored) and a lone string got split into
+// characters. Wrap the spreads in an array so both lists actually merge.
+export const mergePermissions = (a: string[], b: string[]): string[] => [
+  ...new Set([...a, ...b]),
+];
+
 export const generateTokensFromUser = async (ctx: Context, user: User) => {
+  const rolePermissions = await ctx.db.rolePermission.findUnique({
+    where: {
+      role: user.role,
+    },
+  });
   const accessToken = buildAccessToken({
     id: user.id,
     username: user.username,
@@ -82,6 +95,7 @@ export const generateTokensFromUser = async (ctx: Context, user: User) => {
     role: user.role,
     email: user.email ?? undefined,
     image: oidcPicture(user.oidc_userInfo),
+    permissions: mergePermissions(user.permissions, rolePermissions?.permissions ?? []),
   });
 
   const refreshToken = await buildRefreshToken(ctx, user.id);

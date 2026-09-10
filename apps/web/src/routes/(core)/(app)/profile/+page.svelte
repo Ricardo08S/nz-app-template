@@ -1,9 +1,18 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import Icon from "@iconify/svelte";
+  import { client } from "$lib/client.svelte";
   import { user } from "$lib/stores/user.svelte";
   import Card from "../_/ui/Card.svelte";
 
   const currentUser = $derived(user());
+
+  const userQ = client.user.useFindUnique(() => ({
+    where: { id: currentUser.id },
+    select: { oidc_issuer: true, passwordHash: true },
+  }));
+  const isOidcUser = $derived(!!userQ.data?.oidc_issuer);
+  const needsPasswordSetup = $derived(isOidcUser && !userQ.data?.passwordHash);
 
   function getRoleBadgeClass(role: string) {
     switch (role) {
@@ -30,9 +39,24 @@
 
 <div class="min-h-screen bg-base-100">
   <div class="container mx-auto px-4 py-8">
-    <div class="mb-8">
-      <h1 class="mb-2 text-2xl font-bold">Profile</h1>
-      <p class="text-sm text-base-content/70">View your account information</p>
+    <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h1 class="mb-2 text-2xl font-bold">Profile</h1>
+        <p class="text-sm text-base-content/70">View your account information</p>
+      </div>
+      <div class="flex gap-2">
+        {#if needsPasswordSetup}
+          <a href={resolve("/setup-password/")} class="btn btn-outline btn-sm gap-2">
+            <Icon icon="heroicons:key" class="h-4 w-4" />
+            Set Up Password
+          </a>
+        {:else}
+          <a href={resolve("/change-password/")} class="btn btn-outline btn-sm gap-2">
+            <Icon icon="heroicons:key" class="h-4 w-4" />
+            Change Password
+          </a>
+        {/if}
+      </div>
     </div>
 
     <div class="grid gap-6 md:grid-cols-2">

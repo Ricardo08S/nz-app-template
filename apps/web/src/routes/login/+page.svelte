@@ -10,6 +10,7 @@
   let password = $state("");
   let isLoading = $state(false);
   let isOIDCLoading = $state(false);
+  const redirectTo = page.url.searchParams.get("redirect") || "/";
 
   const handlePasswordLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -26,7 +27,6 @@
       token.value = res.accessToken;
       refresh.value = res.refreshToken;
       toast.success("Login successful!");
-      const redirectTo = page.url.searchParams.get("redirect") || "/";
       goto(redirectTo);
     } catch (error) {
       toast.error(errorMessage(error, "Login failed"));
@@ -38,7 +38,7 @@
   const handleOIDCLogin = async () => {
     isOIDCLoading = true;
     try {
-      const res = await trpc_.oidcInitiateLogin.query();
+      const res = await trpc_.oidcInitiateLogin.query({ redirectUrl: redirectTo });
       // Redirect to OIDC provider's login page
       window.location.href = res.authUrl;
     } catch (error) {

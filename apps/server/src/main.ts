@@ -7,6 +7,7 @@ import { createContext, getClient } from "./context.js";
 import { env } from "./env.js";
 import { getReadiness, gitSha, isReady } from "./health.js";
 import { cors, express, trpcExpress } from "./lib.js";
+import { logError } from "./log.js";
 import { appRouter } from "./router.ts";
 import { schema } from "./zenstack/schema";
 
@@ -28,7 +29,7 @@ import { schema } from "./zenstack/schema";
       }
       return "";
     })();
-    console.log("⬅️ ", req.method, req.path, JSON.parse(JSON.stringify(body)));
+    console.log("<- ", req.method, req.path, JSON.parse(JSON.stringify(body)));
 
     next();
   });
@@ -41,6 +42,7 @@ import { schema } from "./zenstack/schema";
       onError: ({ error }) => {
         console.error(error.code, error.name, error.message);
         console.error(error.stack);
+        logError("tRPC Error", error);
       },
     }),
   );
@@ -63,6 +65,7 @@ import { schema } from "./zenstack/schema";
         log(level, message, error) {
           if (level === "error") {
             console.error(error);
+            logError(message, error);
           }
         },
       }),
@@ -117,18 +120,13 @@ import { schema } from "./zenstack/schema";
   // Error handler middleware - must be defined after all routes. Express
   // recognizes this as an error handler by its 4-parameter arity.
   app.use(
-    (
-      err: unknown,
-      _req: express.Request,
-      res: express.Response,
-      _next: express.NextFunction,
-    ) => {
+    (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
       console.error("Uncaught error:", err);
+      logError("Express Error", err);
 
       const isErrorLike = (e: unknown): e is Record<string, unknown> =>
         typeof e === "object" && e !== null;
-      const statusCode =
-        (isErrorLike(err) && (err.statusCode ?? err.status)) || 500;
+      const statusCode = (isErrorLike(err) && (err.statusCode ?? err.status)) || 500;
       const message =
         (isErrorLike(err) && typeof err.message === "string" && err.message) ||
         "Internal server error";
