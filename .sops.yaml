@@ -1,16 +1,9 @@
-# Which secrets/** files are encrypted for which age recipients.
-# Replace the placeholder keys below with real ones - see README's "Secrets
-# (SOPS + age)" section for how to generate and register them.
+# Which *.enc files are encrypted for which age recipients.
+# Replace the placeholder keys below with real ones - see SOPS_GUIDE.md for
+# how to generate and register them.
 creation_rules:
-  - path_regex: secrets[\/]production[\/].*\.sops\.yaml$
-    key_groups:
-      - age:
-          - age1REPLACE_WITH_DEVELOPER_PUBLIC_KEY
-          - age1REPLACE_WITH_CI_PUBLIC_KEY
-          - age1REPLACE_WITH_PRODUCTION_HOST_PUBLIC_KEY
-  - path_regex: secrets[\/]development[\/].*\.sops\.yaml$
-    key_groups:
-      - age:
-          - age1REPLACE_WITH_DEVELOPER_PUBLIC_KEY
-          - age1REPLACE_WITH_CI_PUBLIC_KEY
-          - age1REPLACE_WITH_DEVELOPMENT_HOST_PUBLIC_KEY
+  - path_regex: \.enc$
+    age: >-
+      age1REPLACE_WITH_DEVELOPER_PUBLIC_KEY,
+      age1REPLACE_WITH_CI_PUBLIC_KEY,
+      age1REPLACE_WITH_PRODUCTION_HOST_PUBLIC_KEY

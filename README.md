@@ -15,229 +15,172 @@ same way `core.zmodel` already gates `User`. See `CLAUDE.md`'s Architecture sect
 
 ## Deployment (VPS)
 
-Production runs blue-green: two identical `server`+`web` slots behind a Caddy reverse proxy, only
-one live at a time, so a deploy never has downtime unless the migration forces it (see "Breaking
-migrations" below). This section is a first-time setup walkthrough. The scripts that make it work
-live in `deploy/` — see `CLAUDE.md`'s Deployment section for what each file does.
+Production runs blue-green: two identical slots per app (`server` and `web` each), behind a
+natively-installed Caddy. Only one slot per app is live at a time, so a deploy never has downtime.
+No image registry, no separate build job — the self-hosted GitHub Actions runner builds the Docker
+image and runs it right there, because the runner **is** the deploy target.
 
-**Status as of now: written and validated as far as possible without a live VPS (syntax, `docker
-compose config`, dry-run logic tests) — never actually run end to end. Expect friction on the first
-real attempt; that's normal for untested infrastructure, not a sign something is broken.**
+**Central services, not self-hosted:** Postgres, S3 (Garage) and Authentik (OIDC) are assumed to
+already be running somewhere — typically one shared instance of each, reused across every app you
+deploy this way — not spun up per app. This template's job is to make a new app register itself
+against those (create its DB, its bucket+key, its OIDC client) without any manual click-through, not
+to run the infra itself. Local dev is the exception: `docker-compose.services.yml` at the repo root
+still self-hosts a throwaway Postgres+Garage for `pnpm dev`.
 
-### 0. Prerequisites
+### 0. Prerequisites (on the VPS / runner host)
 
 ```bash
-docker compose version                    # Docker + Compose plugin present
+docker version                            # Docker present
 id $(whoami) | grep docker                # your user is in the docker group
-ss -lntp | grep -E ':(80|443)'            # empty — nothing else already bound to these ports
-jq --version                              # deploy.sh/rollback.sh need this — apt install jq if missing
+caddy version                             # native Caddy binary (not the docker image)
+jq --version; curl --version; envsubst --version   # deploy workflows need these
+sops --version; age --version             # secrets tooling — see SOPS_GUIDE.md
 ```
 
-DNS for all 4 domains must already point at the VPS's IP before you go further. The pattern is
-`$APP_NAME-$APP_ENV-*` — see `deploy/env/production.env` for the exact four once `BASE_DOMAIN` is set.
+```bash
+ss -lntp | grep -E ':(80|443)'             # must be empty, or already Caddy — see "Edge proxy" in step 5
+```
 
-### 1. Clone and set your domain
+DNS for both domains (`$APP_NAME-$APP_ENV-server.$BASE_DOMAIN` and `$APP_NAME-$APP_ENV.$BASE_DOMAIN`)
+must already point at this host.
+
+### 1. Clone and set your config
 
 ```bash
 git clone <your-fork-url> /srv/nz-app-template-src
 cd /srv/nz-app-template-src
 ```
 
-Two manual one-line edits, both plaintext (not secrets):
-
-`deploy/env/production.env`:
+Edit `deploy/env/production.env` (plaintext, no secrets — committed to git):
 ```
-BASE_DOMAIN=your-real-domain.com   # was the nafkhan.id placeholder
-ACME_EMAIL=you@your-real-email.com # was <FILL_WITH_REAL_EMAIL>
+APP_NAME=your-real-app-name
+BASE_DOMAIN=your-real-domain.com
+ACME_EMAIL=you@your-real-email.com
+CENTRAL_S3_DOMAIN=s3.your-domain.com    # the shared Garage instance's public domain
+CADDYFILE=/home/<runner-user>/kode/Caddyfile
+CADDY_BIN=/usr/bin/caddy
+STATE_DIR=/home/<runner-user>/kode/running-prod/your-real-app-name-production-deploy-state
+SERVER_BLUE_PORT=... SERVER_GREEN_PORT=... WEB_BLUE_PORT=... WEB_GREEN_PORT=...   # pick 4 free ports
 ```
-
-`deploy/garage.production.toml`:
-```
-root_domain = ".web.your-real-domain.com"   # was ROOT_DOMAIN_PLACEHOLDER
-```
-This is a **separate file** from `deploy/garage.toml` (which local dev uses, and which stays
-`.web.localhost`) — TOML can't read env vars, so the two domains can't share one file.
 
 ### 2. Age key + secrets
 
 ```bash
-age-keygen -o /etc/sops/age/keys.txt
-chmod 600 /etc/sops/age/keys.txt   # on Linux this is real, unlike NTFS
+mkdir -p ~/.config/sops/age
+age-keygen -o ~/.config/sops/age/keys.txt
 ```
-Send the printed public key to whoever holds `secrets/production/*.sops.yaml` to add it to
-`.sops.yaml` (or, if you're setting up secrets from scratch yourself, add it there first, then
-encrypt). See the Secrets section below for the day-to-day commands.
+Add the printed public key to `.sops.yaml`'s recipient list (or, if you're setting this up from
+scratch, add it there first). Full day-to-day commands are in `SOPS_GUIDE.md`.
 
+Create `apps/server/.env.production` from `apps/server/.env.template`, filling in the real values
+for your centrally-hosted Postgres/S3/Authentik (`DATABASE_URL`, `AWS_S3_ENDPOINT`, `OIDC_ISSUER`,
+etc. — ask whoever runs those, or see steps 3/4 below for the S3/OIDC credentials specifically),
+then encrypt it:
 ```bash
-export SOPS_AGE_KEY_FILE=/etc/sops/age/keys.txt
-set -a
-source deploy/env/production.env
-source <(sops -d --output-type dotenv secrets/production/infra.sops.yaml)
-set +a
+sops -e apps/server/.env.production > apps/server/.env.production.enc
 ```
 
-### 3. GHCR login + networks (one-time)
+### 3. Register the S3 bucket + key (optional if you're not using file uploads)
 
+No manual click-through against the central Garage's own admin UI/CLI. `scripts/garage-init.sh` in
+**remote mode** talks to its Admin API — idempotent, safe to re-run:
 ```bash
-docker login ghcr.io -u <your-github-username>   # PAT with read:packages scope
-docker network create edge
-docker network create appnet
+export GARAGE_ADMIN_URL=https://garage-admin.your-domain.com:3903
+export GARAGE_ADMIN_TOKEN=<Garage admin API token>
+bash scripts/garage-init.sh your-real-app-name-production
 ```
+Prints `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` the first time (not re-printed on a later
+re-run — the secret isn't stored in plaintext by Garage). Put those into
+`apps/server/.env.production`, then re-encrypt (`sops -e apps/server/.env.production >
+apps/server/.env.production.enc`).
 
-### 4. Bring up Postgres + Garage, then Caddy
+Public read access + CORS for direct browser uploads are **not** set up by this script in remote
+mode (see the script's own comment — the exact Admin API shape for those wasn't confirmed against
+a real central instance). Set them up once by hand against that Garage, matching however its other
+buckets are already configured, or ask whoever runs it.
 
+### 4. Register OIDC with Authentik (optional — skip if not using OIDC login)
+
+Same idea, against Authentik's REST API:
 ```bash
-docker compose -f deploy/docker-compose.services.yml up -d
+export AUTHENTIK_URL=https://auth.your-domain.com
+export AUTHENTIK_TOKEN=<admin API token, from Authentik: Directory > Tokens>
+export APP_NAME=your-real-app-name APP_ENV=production
+export OIDC_REDIRECT_URI=https://your-real-app-name-production.your-domain.com/auth/callback
+bash scripts/authentik-init.sh
 ```
+Prints `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`/`OIDC_REDIRECT_URI` — put those into
+`apps/server/.env.production`, re-encrypt. Keep `AUTHENTIK_TOKEN` itself somewhere durable (a
+password manager, or its own `.enc` file) so it can be reused for the next app.
 
-Bootstrap the Garage cluster layout once (single node) — the container name has the env suffix, so
-`scripts/garage-init.sh`'s default won't match without overriding it:
+### 5. Edge proxy
+
+Caddy owns 80/443 directly, standalone — no nginx, no other reverse proxy in front of it. Nothing
+to do here: the deploy workflows self-provision Caddy's site blocks and Caddy gets real Let's
+Encrypt certs directly the first time they run. This means Caddy must be the *only* thing bound to
+80/443 on this host — if something else already holds those ports (nginx, apache, another Caddy
+instance), free them up first. On a VPS that already runs other sites, that likely means migrating
+those sites to this same Caddy instance too (each just needs its own site block) rather than running
+two edge proxies side by side — two processes can't both bind the same port.
+
+### 6. Self-hosted runner + CI secret
+
+Register a self-hosted runner on this host (GitHub repo → Settings → Actions → Runners), running
+as the same user that owns `$STATE_DIR`/`$CADDYFILE` and has `SOPS_AGE_KEY_FILE` set (or push
+`SOPS_AGE_KEY` as a GitHub Actions secret instead — the **CI** key, which must also be in
+`.sops.yaml`'s recipients).
+
+### 7. First deploy
+
+Push to `production` (or run either workflow via `workflow_dispatch` from the Actions tab):
 ```bash
-GARAGE_CONTAINER=nz-app-template-production-garage bash scripts/garage-init.sh nz-app-template-production
+git push origin production
 ```
-This prints a real `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` pair at the end. **Fill those into
-`secrets/production/server.sops.yaml`** (`sops secrets/production/server.sops.yaml`) — they're
-still placeholders until this step runs once, and the server won't boot without them.
-
-Caddy's config `import`s per-slot files that only `deploy.sh` ever creates — seed placeholders so
-it can start before the first deploy has run:
-```bash
-mkdir -p /srv/nz-app-template/production/slots /srv/nz-app-template/production/backups
-echo 'reverse_proxy server-blue:3000' > /srv/nz-app-template/production/slots/server.caddy
-echo 'reverse_proxy web-blue:80' > /srv/nz-app-template/production/slots/web.caddy
-docker compose -f deploy/docker-compose.proxy.yml up -d
-```
-
-Caddy will try to get real Let's Encrypt certificates now. **While you're still iterating**, add
-`acme_ca https://acme-staging-v02.api.letsencrypt.org/directory` to the global block in
-`deploy/Caddyfile` — production Let's Encrypt has a rate limit that's easy to hit by accident during
-setup. Remove it once things are stable.
-
-### 5. First deploy
-
-Either push to `production` and let GitHub Actions run it (needs a self-hosted runner registered on
-this VPS — see step 6), or run it by hand once to prove the mechanism works before wiring CI:
-
-```bash
-bash deploy/deploy.sh production \
-  ghcr.io/<owner>/<repo>-server@<digest> \
-  ghcr.io/<owner>/<repo>-web@<digest> \
-  <git-sha>
-```
-(Get the digests from the `build.yml` run's summary on GitHub after pushing.) With no `state.json`
-yet, this bootstraps straight to slot `blue` in normal mode.
-
-### 6. Full CI (optional, once step 5 works manually)
-
-Register a self-hosted runner on this VPS (GitHub repo → Settings → Actions → Runners). Push
-`SOPS_AGE_KEY` (the **CI** key, not the host key) as a GitHub Actions secret. After that, every
-`git push origin production` builds, pushes to GHCR, and deploys automatically.
+`deploy-server.yml` and `deploy-web.yml` run independently (each only re-triggers on changes under
+its own app's path) — first run for each bootstraps straight to slot `blue`.
 
 ### Verify
 
 ```bash
-curl -I https://nz-app-template-production.your-domain.com
-curl https://nz-app-template-production-server.your-domain.com/health/version
-cat /srv/nz-app-template/production/state.json
+curl https://your-real-app-name-production-server.your-domain.com/health/version
+curl -I https://your-real-app-name-production.your-domain.com
+cat $STATE_DIR/active_slot_server $STATE_DIR/active_slot_web
 ```
 
-### Breaking migrations
+### Rollback
 
-`scripts/scan-migrations.ts` flags `DROP TABLE`/`DROP COLUMN`/type changes/renames/required columns
-without a default as breaking. When one lands, `deploy.sh` automatically switches to a different
-path: back up the database, stop the old slot, migrate, start the new slot — a few seconds of
-downtime instead of zero, because the two slots can't safely share a database mid-migration.
-**Rollback after a breaking migration is refused, on purpose** — the old slot's code doesn't match
-the new schema, so `rollback.sh` prints where the pre-migration backup is instead of doing something
-that would just crash.
+No dedicated rollback script — redeploy the last-good commit (`git push` a revert, or re-run the
+workflow at an older SHA via `workflow_dispatch` after `git checkout`). Any failure before the
+Caddy cutover step leaves the previously-live slot serving untouched, so a *failed* deploy is
+already safe by default; this only matters for rolling back a deploy that succeeded but shipped a
+bug.
+
+`scripts/scan-migrations.ts` (breaking-migration detection: `DROP TABLE`/`DROP COLUMN`/type
+changes/renames/required columns without a default) exists but is **not wired into
+deploy-server.yml** — migrations run unconditionally via `zen migrate deploy`. Wire it in yourself
+if you want a gate before that call, mirroring how `deploy-server.yml` already diffs
+`${{ github.sha }}` against the previous commit for other checks.
 
 ### Known gaps, not swept under the rug
 
-- `scripts/validate-env.ts` only validates `apps/server/.env`. `apps/web/.env` is written by the
-  same steps but has no schema to check against yet — a bad `PUBLIC_*` value currently only shows
-  up as a broken page in the browser, not a failed pipeline.
-- The whole `deploy/` mechanism above has never run against a real VPS. Treat the first attempt as
-  a real test, not a rehearsal of something already proven.
+- `scripts/validate-env.ts` only validates the decrypted `apps/server/.env`. `apps/web`'s `PUBLIC_*`
+  vars are computed inline in `deploy-web.yml` from `deploy/env/<env>.env` — no schema check, so a
+  bad value currently only shows up as a broken page in the browser.
+- `scripts/garage-init.sh`'s remote mode doesn't set up public-read/CORS (see step 3) — confirm the
+  exact Admin API request shape against your real Garage before trusting it blindly.
+- None of this has run against a real production VPS end to end yet. Treat the first attempt as a
+  real test.
 
 ## Secrets (SOPS + age)
 
-Secrets live encrypted in git under `secrets/<env>/*.sops.yaml`. Each file decrypts for a fixed
-list of recipients (age public keys) declared in `.sops.yaml`. Non-secret config (domain, app
-name) lives in `deploy/env/<env>.env` as plaintext instead — see `CLAUDE.md`.
+See `SOPS_GUIDE.md` for the full guide (setup, day-to-day editing, adding/revoking team members,
+rotating a value). Short version: `apps/server/.env.<env>.enc` is the only thing SOPS manages —
+one encrypted file per environment, committed to git. `apps/web` has no secrets; its `PUBLIC_*`
+values are either non-secret template defaults (local dev) or computed inline by `deploy-web.yml`
+from `deploy/env/<env>.env` (production) — never SOPS-encrypted.
 
-Prerequisites: `sops` and `age` installed, and `SOPS_AGE_KEY_FILE` pointing at your private key
-(default `~/.config/sops/age/keys.txt`).
-
-### Everyday use
-
-Two equivalent ways to edit a secrets file — pick whichever fits how you work.
-
-**Option A — convenience scripts** (from `apps/server`):
-```bash
-pnpm edit:server-secrets   # sops secrets/production/server.sops.yaml
-pnpm edit:web-secrets      # sops secrets/production/web.sops.yaml
-pnpm edit:infra-secrets    # sops secrets/production/infra.sops.yaml
-```
-
-**Option B — the real `sops` command directly** (from repo root), same effect:
-```bash
-sops secrets/production/server.sops.yaml   # opens $EDITOR with plaintext, re-encrypts on save
-sops -d secrets/production/server.sops.yaml
-sops -d --output-type dotenv secrets/production/server.sops.yaml > apps/server/.env
-```
-
-There is no separate "encrypt" command — `sops <file>` always leaves the file encrypted on disk;
-plaintext only exists transiently in the editor.
-
-### Adding a team member
-
-1. The new member generates their own keypair and sends you **only the public key**:
-   ```bash
-   age-keygen -o keys.txt   # prints "Public key: age1..." — private key never leaves their machine
-   ```
-2. Add that public key to the relevant `key_groups` in `.sops.yaml`, with a comment naming whom
-   it belongs to.
-3. Re-encrypt every secrets file under that `path_regex` for the new recipient list:
-   ```bash
-   sops updatekeys secrets/production/server.sops.yaml
-   sops updatekeys secrets/production/web.sops.yaml
-   sops updatekeys secrets/production/infra.sops.yaml
-   ```
-4. Commit `.sops.yaml` and the re-encrypted files together.
-
-### Revoking access
-
-1. Remove the person's public key line from `.sops.yaml`.
-2. Run `sops updatekeys` on every secrets file under that `path_regex` (same three commands as
-   above) — this re-wraps the data key without them, so their private key can no longer decrypt
-   the file **going forward**.
-3. Commit.
-
-`updatekeys` only protects future versions of the file. Anyone who already decrypted it kept a
-plaintext copy outside git's control, so if the revocation is for cause (compromised laptop,
-departing team member with sensitive access), also rotate the actual secret values — see below —
-not just the recipient list.
-
-### Rotating a secret value
-
-```bash
-sops secrets/production/server.sops.yaml   # edit the value in $EDITOR, save
-```
-Then redeploy so the running app picks up the new value. Do this for JWT signing keys, DB
-passwords, or Garage credentials whenever a holder of the decrypted value leaves or is suspected
-compromised.
-
-### Where private keys live
-
-| Holder | Location |
-|---|---|
-| Developer | `~/.config/sops/age/keys.txt` |
-| CI (GitHub Actions) | secret `SOPS_AGE_KEY` |
-| Production host | `/etc/sops/age/keys.txt` (root, `0600`) |
-
-Back these up somewhere durable (password manager) — losing a private key without revoking it
-first just means re-generating and re-running the "adding a team member" steps for yourself; losing
-**every** developer/CI/host key at once makes the ciphertext unrecoverable.
-
-On Windows, `chmod 600` does not actually restrict NTFS permissions (`ls -la` still shows
-group/other read afterwards) — use `icacls` if that matters on a shared machine.
+If a new developer needs access faster than the proper key-exchange round trip in `SOPS_GUIDE.md`
+allows, sending the decrypted `.env` contents once over a trusted channel (WhatsApp, etc.) and
+having them set up their own age key afterward is a fine bootstrap shortcut — just don't let
+plaintext secrets linger indefinitely in chat history if any of those values are meant to stay
+long-lived (rotate them afterward if that's a concern).

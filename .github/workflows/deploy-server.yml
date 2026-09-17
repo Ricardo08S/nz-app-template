@@ -1,0 +1,218 @@
+# Blue-green deploy of apps/server, behind a natively-installed Caddy — no
+# image registry, no separate build job: the self-hosted runner builds the
+# image and runs it in place, since the runner IS the deploy target.
+#
+# One-time VPS setup (not done by this workflow — see README's Deployment
+# section): install docker + a native Caddy (reloaded via `caddy reload`,
+# no sudo/systemd needed) + sops, put the runner's age key where sops can
+# find it, register the runner's SOPS_AGE_KEY (or SOPS_AGE_KEY_FILE) and
+# push `deploy/env/<env>.env` values as needed.
+#
+# Strategy: two containers (blue/green, ports from deploy/env/<env>.env),
+# both bound to 127.0.0.1 only. A state file on the runner tracks which slot
+# is live. Each deploy builds the image, runs migrations once, boots the
+# *other* slot, health-checks it via /health/ready, flips Caddy's upstream,
+# verifies /health/version through the public domain, then removes the old
+# slot. Any failure before the Caddy flip leaves the old slot serving
+# untouched — safe by default, no separate rollback script needed (redeploy
+# the last-good commit to go back).
+
+name: Deploy server (blue-green)
+
+on:
+  push:
+    branches: [production]
+    paths:
+      - apps/server/**
+      - apps/server/.env.production.enc
+      - deploy/env/production.env
+      - .github/workflows/deploy-server.yml
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-server-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  APP_ENV: ${{ github.ref_name }}
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Load app env
+        run: |
+          set -a; source "deploy/env/${APP_ENV}.env"; set +a
+          {
+            echo "APP_NAME=$APP_NAME"
+            echo "BASE_DOMAIN=$BASE_DOMAIN"
+            echo "CADDYFILE=$CADDYFILE"
+            echo "CADDY_BIN=$CADDY_BIN"
+            echo "STATE_DIR=${STATE_DIR}"
+            echo "BLUE_PORT=$SERVER_BLUE_PORT"
+            echo "GREEN_PORT=$SERVER_GREEN_PORT"
+            echo "IMAGE=${APP_NAME}-server"
+            echo "PUBLIC_DOMAIN=${APP_NAME}-${APP_ENV}-server.${BASE_DOMAIN}"
+            echo "PUBLIC_HEALTH_URL=https://${APP_NAME}-${APP_ENV}-server.${BASE_DOMAIN}/health/version"
+          } >> "$GITHUB_ENV"
+
+      - name: Resolve blue/green slots
+        id: slots
+        run: |
+          set -euo pipefail
+          mkdir -p "$STATE_DIR"
+          STATE_FILE="$STATE_DIR/active_slot_server"
+          CURRENT=$(cat "$STATE_FILE" 2>/dev/null || echo "green")
+          if [ "$CURRENT" = "blue" ]; then
+            TARGET="green"; TARGET_PORT="$GREEN_PORT"; CURRENT_PORT="$BLUE_PORT"
+          else
+            TARGET="blue"; TARGET_PORT="$BLUE_PORT"; CURRENT_PORT="$GREEN_PORT"
+          fi
+          CADDY_SNIPPET="$STATE_DIR/server.caddy"
+          {
+            echo "current=$CURRENT"
+            echo "target=$TARGET"
+            echo "target_port=$TARGET_PORT"
+            echo "current_port=$CURRENT_PORT"
+            echo "caddy_snippet=$CADDY_SNIPPET"
+          } >>"$GITHUB_OUTPUT"
+          echo "Deploying to '$TARGET' slot (port $TARGET_PORT); current live slot is '$CURRENT'."
+
+      - name: Ensure Caddy site block exists
+        run: |
+          set -euo pipefail
+          CADDY_SNIPPET="${{ steps.slots.outputs.caddy_snippet }}"
+          [ -f "$CADDY_SNIPPET" ] || printf 'reverse_proxy 127.0.0.1:%s\n' "${{ steps.slots.outputs.current_port }}" >"$CADDY_SNIPPET"
+          touch "$CADDYFILE"
+          if ! grep -qF "$PUBLIC_DOMAIN {" "$CADDYFILE"; then
+            printf '\n%s {\n  import %s\n}\n' "$PUBLIC_DOMAIN" "$CADDY_SNIPPET" >>"$CADDYFILE"
+            echo "Added $PUBLIC_DOMAIN block to $CADDYFILE, importing $CADDY_SNIPPET"
+          fi
+
+      - name: Build image
+        run: |
+          docker build -f apps/server/Dockerfile \
+            --build-arg GIT_SHA=${{ github.sha }} \
+            -t "$IMAGE:${{ github.sha }}" .
+
+      - name: Decrypt env and validate
+        id: env
+        run: |
+          set -euo pipefail
+          ENV_TMP=$(mktemp)
+          sops -d "apps/server/.env.${APP_ENV}.enc" >"$ENV_TMP"
+
+          # docker --env-file does not strip quotes or expand $VARS like a shell
+          # would, but our .env values use both (e.g. DATABASE_URL contains
+          # "...$APP_NAME-$APP_ENV"). Resolve via sed (de-quote) + envsubst
+          # (expand refs) — plain text substitution, never eval/source the
+          # decrypted content as shell code.
+          DEQUOTED_TMP=$(mktemp)
+          sed -E 's/^([A-Za-z_][A-Za-z0-9_]*)="(.*)"$/\1=\2/' "$ENV_TMP" >"$DEQUOTED_TMP"
+          rm -f "$ENV_TMP"
+
+          while IFS= read -r line; do
+            case "$line" in ''|'#'*) continue ;; esac
+            export "$line"
+          done <"$DEQUOTED_TMP"
+
+          RESOLVED_TMP=$(mktemp)
+          envsubst <"$DEQUOTED_TMP" >"$RESOLVED_TMP"
+          rm -f "$DEQUOTED_TMP"
+
+          echo "path=$RESOLVED_TMP" >>"$GITHUB_OUTPUT"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate decrypted env against the runtime schema
+        run: pnpm exec tsx scripts/validate-env.ts "${{ steps.env.outputs.path }}"
+
+      - name: Run database migrations
+        run: |
+          docker run --rm --env-file "${{ steps.env.outputs.path }}" \
+            "$IMAGE:${{ github.sha }}" \
+            node_modules/.bin/zen migrate deploy
+
+      - name: Start target slot container
+        run: |
+          set -euo pipefail
+          TARGET="${{ steps.slots.outputs.target }}"
+          TARGET_PORT="${{ steps.slots.outputs.target_port }}"
+          docker rm -f "${IMAGE}-$TARGET" >/dev/null 2>&1 || true
+          docker run -d \
+            --name "${IMAGE}-$TARGET" \
+            --restart unless-stopped \
+            --env-file "${{ steps.env.outputs.path }}" \
+            -p "127.0.0.1:$TARGET_PORT:3000" \
+            "$IMAGE:${{ github.sha }}"
+
+      - name: Health check target slot
+        run: |
+          set -euo pipefail
+          TARGET_PORT="${{ steps.slots.outputs.target_port }}"
+          TARGET="${{ steps.slots.outputs.target }}"
+          for i in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:$TARGET_PORT/health/ready" >/dev/null 2>&1; then
+              echo "Target slot '$TARGET' healthy."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Target slot '$TARGET' failed health check; leaving old slot live."
+          docker logs --tail 100 "${IMAGE}-$TARGET" || true
+          docker rm -f "${IMAGE}-$TARGET" || true
+          exit 1
+
+      - name: Cut over Caddy to target slot
+        run: |
+          set -euo pipefail
+          TARGET_PORT="${{ steps.slots.outputs.target_port }}"
+          CADDY_SNIPPET="${{ steps.slots.outputs.caddy_snippet }}"
+          printf 'reverse_proxy 127.0.0.1:%s\n' "$TARGET_PORT" >"$CADDY_SNIPPET"
+          "$CADDY_BIN" validate --config "$CADDYFILE"
+          "$CADDY_BIN" reload --config "$CADDYFILE"
+
+      - name: Verify public endpoint after cutover
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 15); do
+            LIVE_SHA="$(curl -fsS "$PUBLIC_HEALTH_URL" | jq -r '.sha' 2>/dev/null || true)"
+            if [ "$LIVE_SHA" = "${{ github.sha }}" ]; then
+              echo "Public endpoint verified at ${{ github.sha }}."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Public domain did not report sha=${{ github.sha }} after cutover to ${{ steps.slots.outputs.target }} (got '$LIVE_SHA')."
+          exit 1
+
+      - name: Persist active slot and stop old container
+        if: success()
+        run: |
+          set -euo pipefail
+          echo "${{ steps.slots.outputs.target }}" >"$STATE_DIR/active_slot_server"
+          docker rm -f "${IMAGE}-${{ steps.slots.outputs.current }}" >/dev/null 2>&1 || true
+          echo "Old slot '${{ steps.slots.outputs.current }}' stopped and removed. Live slot is now '${{ steps.slots.outputs.target }}'."
+
+      - name: Clean up decrypted env
+        if: always()
+        run: rm -f "${{ steps.env.outputs.path }}"
+
+      - name: Prune old images
+        if: success()
+        run: docker image prune -f --filter "until=72h" || true
