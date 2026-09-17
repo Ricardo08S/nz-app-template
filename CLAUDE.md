@@ -120,11 +120,16 @@ Deployment section for the full first-time walkthrough; this is the code map.
   default, no separate rollback script.
 - **`deploy/env/<env>.env`** — plaintext, non-secret, one file per environment: `APP_NAME`,
   `APP_ENV`, `BASE_DOMAIN`, `ACME_EMAIL`, `CENTRAL_S3_DOMAIN`, Caddy paths (`CADDYFILE`,
-  `CADDY_BIN`, `STATE_DIR`), and the four blue/green ports.
+  `CADDY_APPS_DIR`, `CADDY_BIN`, `STATE_DIR`), and the four blue/green ports.
 - **Caddy owns 80/443 directly, standalone** — no nginx or other reverse proxy in front of it. It
   gets its own Let's Encrypt certs and does the blue/green slot switching. This means it must be
   the only thing bound to those ports on the host; a VPS with other sites needs them migrated onto
   this same Caddy instance (their own site blocks) rather than run a second edge proxy alongside it.
+- **`$CADDYFILE` (the real system Caddyfile) vs `$CADDY_APPS_DIR`** — the workflows never write to
+  `$CADDYFILE` itself; it's shared (root-owned, other tenants' blocks live there on a shared box)
+  and only needs one `import $CADDY_APPS_DIR/*.caddy` line, added once outside this repo (README's
+  "Edge proxy" step). Each deploy overwrites its own `$CADDY_APPS_DIR/<domain>.caddy` file — no
+  shared-file mutation, no risk to other tenants' blocks.
 - **`scripts/garage-init.sh`** — two modes. Local (default): `docker exec` + the `garage` CLI
   against the `docker-compose.services.yml` container, for dev only. Remote (`GARAGE_ADMIN_URL`
   set): talks to a centrally-hosted Garage's Admin API instead, since exec-ing into its container

@@ -6,10 +6,10 @@ name: Deploy web (blue-green)
 
 on:
   push:
-    branches: [production]
+    branches: [production, staging]
     paths:
       - apps/web/**
-      - deploy/env/production.env
+      - deploy/env/*.env
       - .github/workflows/deploy-web.yml
   workflow_dispatch: {}
 
@@ -34,6 +34,7 @@ jobs:
             echo "APP_NAME=$APP_NAME"
             echo "BASE_DOMAIN=$BASE_DOMAIN"
             echo "CADDYFILE=$CADDYFILE"
+            echo "CADDY_APPS_DIR=$CADDY_APPS_DIR"
             echo "CADDY_BIN=$CADDY_BIN"
             echo "STATE_DIR=${STATE_DIR}"
             echo "BLUE_PORT=$WEB_BLUE_PORT"
@@ -71,11 +72,11 @@ jobs:
           set -euo pipefail
           CADDY_SNIPPET="${{ steps.slots.outputs.caddy_snippet }}"
           [ -f "$CADDY_SNIPPET" ] || printf 'reverse_proxy 127.0.0.1:%s\n' "${{ steps.slots.outputs.current_port }}" >"$CADDY_SNIPPET"
-          touch "$CADDYFILE"
-          if ! grep -qF "$PUBLIC_DOMAIN {" "$CADDYFILE"; then
-            printf '\n%s {\n  import %s\n}\n' "$PUBLIC_DOMAIN" "$CADDY_SNIPPET" >>"$CADDYFILE"
-            echo "Added $PUBLIC_DOMAIN block to $CADDYFILE, importing $CADDY_SNIPPET"
-          fi
+          # Never write to $CADDYFILE directly — it's the shared system Caddyfile,
+          # other tenants' blocks live there too. We only own our file under
+          # CADDY_APPS_DIR, which $CADDYFILE imports (set up once, outside this repo).
+          mkdir -p "$CADDY_APPS_DIR"
+          printf '%s {\n  import %s\n}\n' "$PUBLIC_DOMAIN" "$CADDY_SNIPPET" >"$CADDY_APPS_DIR/${PUBLIC_DOMAIN}.caddy"
 
       - name: Build image
         run: docker build -f apps/web/Dockerfile -t "$IMAGE:${{ github.sha }}" .
