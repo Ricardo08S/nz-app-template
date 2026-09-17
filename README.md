@@ -115,13 +115,33 @@ password manager, or its own `.enc` file) so it can be reused for the next app.
 
 ### 5. Edge proxy
 
-Caddy owns 80/443 directly, standalone — no nginx, no other reverse proxy in front of it. Nothing
-to do here: the deploy workflows self-provision Caddy's site blocks and Caddy gets real Let's
-Encrypt certs directly the first time they run. This means Caddy must be the *only* thing bound to
-80/443 on this host — if something else already holds those ports (nginx, apache, another Caddy
-instance), free them up first. On a VPS that already runs other sites, that likely means migrating
-those sites to this same Caddy instance too (each just needs its own site block) rather than running
-two edge proxies side by side — two processes can't both bind the same port.
+Caddy owns 80/443 directly, standalone — no nginx, no other reverse proxy in front of it. This
+means Caddy must be the *only* thing bound to 80/443 on this host — if something else already
+holds those ports (nginx, apache, another Caddy instance), free them up first. On a VPS that
+already runs other sites, that likely means migrating those onto this same Caddy instance too
+(each just needs its own site block) rather than running two edge proxies side by side.
+
+**One-time setup, as root** (this repo's workflows never touch the system Caddyfile directly — see
+below for why):
+```bash
+mkdir -p /etc/caddy/apps
+chown <runner-user>:<runner-user> /etc/caddy/apps   # the user the self-hosted runner service runs as
+```
+Add one line to the existing `/etc/caddy/Caddyfile` (alongside whatever other tenants' blocks are
+already there):
+```
+import /etc/caddy/apps/*.caddy
+```
+`caddy reload --config /etc/caddy/Caddyfile` to pick it up.
+
+**Why not have the workflow write directly into `/etc/caddy/Caddyfile`:** on a shared box that file
+is root-owned and holds every tenant's site blocks, not just this app's — a CI job writing into it
+directly is one bad run away from corrupting someone else's config. `CADDY_APPS_DIR` gives this
+app (and any other app deployed the same way) its own file to own completely; the shared Caddyfile
+only ever needs that one `import` line, set up once.
+
+After this, nothing else to do per-app: `deploy-server.yml`/`deploy-web.yml` write their own
+`$CADDY_APPS_DIR/<domain>.caddy` file and `caddy reload` picks it up, Let's Encrypt cert included.
 
 ### 6. Self-hosted runner + CI secret
 
@@ -132,10 +152,15 @@ as the same user that owns `$STATE_DIR`/`$CADDYFILE` and has `SOPS_AGE_KEY_FILE`
 
 ### 7. First deploy
 
-Push to `production` (or run either workflow via `workflow_dispatch` from the Actions tab):
+Push to `production` (or `staging`, or `workflow_dispatch` from the Actions tab):
 ```bash
 git push origin production
 ```
+Each branch is its own environment — `APP_ENV` comes from `github.ref_name`, which is what picks
+`deploy/env/<branch>.env` and `apps/server/.env.<branch>.enc`. `staging.env` ships alongside
+`production.env` for exactly this; add more the same way (new branch + matching `deploy/env/*.env`
++ `apps/server/.env.*.enc`) if you want more environments.
+
 `deploy-server.yml` and `deploy-web.yml` run independently (each only re-triggers on changes under
 its own app's path) — first run for each bootstraps straight to slot `blue`.
 
