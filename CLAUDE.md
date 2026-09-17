@@ -103,39 +103,46 @@ The browser PUTs directly to Garage, so the bucket needs CORS (`PutBucketCors`) 
 
 ## Deployment
 
-Production deploys are blue-green: two identical slots (`blue`/`green`), each a full
-`server`+`web` pair, behind a Caddy reverse proxy. Only one slot receives traffic at a time.
-Full step-by-step VPS setup is in `README.md`; this is the code map.
+Production deploys are blue-green per app (`server` and `web` each get their own blue/green pair),
+behind a natively-installed Caddy — no docker-compose, no image registry: the self-hosted GitHub
+Actions runner builds the image and runs it in place, because the runner **is** the deploy target.
+Postgres/S3(Garage)/Authentik are centrally hosted elsewhere, not run by this repo — see README's
+Deployment section for the full first-time walkthrough; this is the code map.
 
-- **`deploy/docker-compose.app.yml`** — one slot (server+web), parameterized by `SLOT`/
-  `SERVER_IMAGE`/`WEB_IMAGE` env vars. No ports published — reached only by network alias
-  on the `edge` docker network.
-- **`deploy/docker-compose.services.yml`** / **`docker-compose.proxy.yml`** — the persistent
-  parts (Postgres, Garage, Caddy edge). Brought up once during VPS setup, not per-deploy.
-- **`deploy/_common.sh`** — shared by `deploy.sh`/`rollback.sh`: derives the four domains from
-  `APP_NAME`/`APP_ENV`/`BASE_DOMAIN`, reads/writes `state.json` (the single source of truth for
-  which slot is live — never re-derive this by grepping the Caddyfile), polls readiness, verifies
-  the public domain after a switch.
-- **`deploy/deploy.sh`** — the actual deploy: reads `state.json` → picks the idle slot → detects
-  whether any new migration is breaking (via `scripts/scan-migrations.ts`, comparing against the
-  previously-deployed commit) → migrates → starts the new slot → health-checks it → switches Caddy
-  → verifies → stops the old slot. A breaking migration takes a different, non-zero-downtime path:
-  backup the DB, stop the old slot *before* migrating (they share one DB, so the old slot can't be
-  left running against a schema it doesn't understand), then proceed. Migrations never run
-  unconfirmed: no new migration files → step is skipped; new ones present → deploy aborts unless
-  `CONFIRM_MIGRATIONS=true` (set via the `deploy.yml` `workflow_dispatch` input).
-- **`deploy/rollback.sh`** — flips back to the previous slot (`state.json.previous`). Refuses
-  outright if the last deploy was a breaking migration — the old slot's code no longer matches the
-  schema, so a pointer flip would just crash it. The message it prints points at the DB backup
-  instead.
+- **`.github/workflows/deploy-server.yml`** / **`deploy-web.yml`** — one workflow per app, same
+  shape: load `deploy/env/<env>.env` → resolve which slot (`blue`/`green`) is idle from a state
+  file on the runner → ensure a Caddy site block exists (self-provisioning; writes into
+  `$CADDYFILE` on first run) → build the image → (server only: decrypt
+  `apps/server/.env.<env>.enc` via sops, validate it, run `zen migrate deploy`) → `docker run` the
+  target slot on its port → health-check it (`/health/ready` for server, `/health/live` for web) →
+  rewrite the Caddy snippet to point at it and `caddy reload` → verify the public domain → stop the
+  old slot. A failure before the Caddy reload leaves the previously-live slot untouched — safe by
+  default, no separate rollback script.
+- **`deploy/env/<env>.env`** — plaintext, non-secret, one file per environment: `APP_NAME`,
+  `APP_ENV`, `BASE_DOMAIN`, `ACME_EMAIL`, `CENTRAL_S3_DOMAIN`, Caddy paths (`CADDYFILE`,
+  `CADDY_BIN`, `STATE_DIR`), and the four blue/green ports.
+- **Caddy owns 80/443 directly, standalone** — no nginx or other reverse proxy in front of it. It
+  gets its own Let's Encrypt certs and does the blue/green slot switching. This means it must be
+  the only thing bound to those ports on the host; a VPS with other sites needs them migrated onto
+  this same Caddy instance (their own site blocks) rather than run a second edge proxy alongside it.
+- **`scripts/garage-init.sh`** — two modes. Local (default): `docker exec` + the `garage` CLI
+  against the `docker-compose.services.yml` container, for dev only. Remote (`GARAGE_ADMIN_URL`
+  set): talks to a centrally-hosted Garage's Admin API instead, since exec-ing into its container
+  usually isn't an option. Idempotent either way; prints the `AWS_ACCESS_KEY_ID`/
+  `AWS_SECRET_ACCESS_KEY` pair once. Remote mode does *not* set up public-read/CORS — that part
+  needs confirming against the real instance (see the script's own comment).
+- **`scripts/authentik-init.sh`** — registers this app's OAuth2 provider + application in
+  Authentik via its REST API (not `ak apply_blueprint`/docker exec — Authentik usually runs on a
+  separate host). Idempotent; prints the `OIDC_*` values.
 - **`scripts/scan-migrations.ts`** — classifies a `migration.sql` file as breaking (`DROP TABLE`,
   `DROP COLUMN`, `ALTER COLUMN ... TYPE`, `RENAME`, `ADD COLUMN ... NOT NULL` without a `DEFAULT`)
-  or safe, by matching real DDL keywords (not Prisma's own `-- DropTable`-style comments, which
-  render without a space and so never match).
+  or safe. Written, tested, but **not currently wired into `deploy-server.yml`** — migrations run
+  unconditionally via `zen migrate deploy`. Wire it in as a gate if you want that safety back.
 
 **Known limitation, worth fixing before relying on it further:** `scripts/validate-env.ts` only
-validates `apps/server/.env` against its Zod schema; `apps/web/.env` is written by the same CI/deploy
-steps but never validated, so a broken `PUBLIC_*` value only surfaces at runtime in the browser.
+validates the decrypted `apps/server/.env`. `apps/web`'s `PUBLIC_*` values are computed inline in
+`deploy-web.yml` from `deploy/env/<env>.env` — no schema to check them against, so a bad value only
+surfaces at runtime in the browser.
 
-**`secrets/` is empty** — this project has no age keys yet. See `secrets/README.md` and README's
-"Secrets (SOPS + age)" section before your first real deploy.
+See `SOPS_GUIDE.md` for the secrets workflow — `apps/server/.env.<env>.enc` is the only thing SOPS
+manages; `.sops.yaml` still has placeholder recipient keys until your first real deploy.

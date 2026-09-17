@@ -1,7 +1,7 @@
 #!/usr/bin/env -S pnpm exec tsx
-// Classifies migration.sql files as breaking or safe, so deploy.sh (Langkah 7)
-// can pick blue-green (safe) vs backup-then-stop-old (breaking) automatically
-// instead of relying on a human to remember (§4.7).
+// Classifies migration.sql files as breaking or safe. Not currently wired into
+// .github/workflows/deploy-server.yml (see README's Deployment section) — kept
+// standalone so it can be wired in as a gate if you want that safety back.
 //
 // Usage: pnpm exec tsx scripts/scan-migrations.ts <migration.sql>...
 //

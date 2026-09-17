@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
-# Bootstraps a single-node Garage: cluster layout, bucket, access key, public reads.
-# Idempotent, so it is safe to re-run.
+# Bootstraps a bucket + access key for this app in Garage. Idempotent.
+#
+# Two modes:
+#   local  (default) - talks to the docker-compose.services.yml Garage
+#                       container via `docker exec` + the `garage` CLI. For
+#                       local dev only.
+#   remote            - talks to a centrally-hosted Garage's Admin API over
+#                       HTTP (GARAGE_ADMIN_URL + GARAGE_ADMIN_TOKEN). Use
+#                       this for a real deploy, since the central Garage
+#                       usually runs on a different host than this checkout
+#                       — same reasoning as scripts/authentik-init.sh.
+#
+# Usage:
+#   bash scripts/garage-init.sh <bucket>                    # local (docker exec)
+#   GARAGE_ADMIN_URL=https://garage-admin.example.com:3903 \
+#   GARAGE_ADMIN_TOKEN=<admin token> \
+#   bash scripts/garage-init.sh <bucket>                    # remote (Admin API)
 set -euo pipefail
 
 BUCKET="${1:-${AWS_S3_BUCKET:-}}"
@@ -8,9 +23,54 @@ if [ -z "$BUCKET" ]; then
   echo "usage: $0 <bucket>   (or set AWS_S3_BUCKET)" >&2
   exit 1
 fi
-
-CONTAINER="${GARAGE_CONTAINER:-nz-app-template-garage}"
 KEY_NAME="${BUCKET}-key"
+
+if [ -n "${GARAGE_ADMIN_URL:-}" ]; then
+  # --- remote mode: Garage Admin API v2 -------------------------------
+  : "${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN (Garage admin API bearer token)}"
+  API="${GARAGE_ADMIN_URL%/}/v2"
+  api() { curl -fsS -H "Authorization: Bearer $GARAGE_ADMIN_TOKEN" -H "Content-Type: application/json" "$@"; }
+
+  BUCKET_INFO="$(api "${API}/GetBucketInfo?globalAlias=${BUCKET}" || true)"
+  BUCKET_ID="$(echo "$BUCKET_INFO" | jq -r '.id // empty' 2>/dev/null || true)"
+  if [ -z "$BUCKET_ID" ]; then
+    echo "==> creating bucket $BUCKET"
+    BUCKET_ID="$(api -X POST -d "$(jq -n --arg a "$BUCKET" '{globalAlias:$a}')" "${API}/CreateBucket" | jq -r '.id')"
+  else
+    echo "==> bucket $BUCKET already exists (id=$BUCKET_ID)"
+  fi
+
+  KEY_INFO="$(api "${API}/GetKeyInfo?search=${KEY_NAME}&showSecretKey=true" || true)"
+  ACCESS_KEY="$(echo "$KEY_INFO" | jq -r '.accessKeyId // empty' 2>/dev/null || true)"
+  if [ -z "$ACCESS_KEY" ]; then
+    echo "==> creating key $KEY_NAME"
+    KEY_INFO="$(api -X POST -d "$(jq -n --arg n "$KEY_NAME" '{name:$n}')" "${API}/CreateKey")"
+    ACCESS_KEY="$(echo "$KEY_INFO" | jq -r '.accessKeyId')"
+    SECRET_KEY="$(echo "$KEY_INFO" | jq -r '.secretAccessKey')"
+    echo
+    echo "==> credentials for apps/server/.env.${APP_ENV:-production}.enc (printed once — Garage does not store the secret in plaintext)"
+    echo "AWS_ACCESS_KEY_ID=${ACCESS_KEY}"
+    echo "AWS_SECRET_ACCESS_KEY=${SECRET_KEY}"
+  else
+    echo "==> key $KEY_NAME already exists (id=$ACCESS_KEY) — leaving its secret untouched"
+  fi
+
+  echo "==> granting the key read+write on the bucket"
+  api -X POST -d "$(jq -n --arg b "$BUCKET_ID" --arg k "$ACCESS_KEY" \
+    '{bucketId:$b, accessKeyId:$k, permissions:{read:true, write:true, owner:true}}')" \
+    "${API}/AllowBucketKey" > /dev/null
+
+  echo
+  echo "!! Public read access and CORS for browser-direct uploads are NOT set up by this"
+  echo "   script in remote mode — the exact Admin API shape for those (website config,"
+  echo "   cors_rules) wasn't confirmed against the real central Garage instance. Verify"
+  echo "   with whoever runs it (existing buckets there show the working pattern to copy),"
+  echo "   or set them by hand once via the Garage CLI against that host."
+  exit 0
+fi
+
+# --- local mode: docker exec + garage CLI (dev only) -------------------
+CONTAINER="${GARAGE_CONTAINER:-nz-app-template-garage}"
 ZONE="${GARAGE_ZONE:-dc1}"
 CAPACITY="${GARAGE_CAPACITY:-1G}"
 
