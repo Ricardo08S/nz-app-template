@@ -146,6 +146,7 @@ jobs:
       - name: Run database migrations
         run: |
           docker run --rm --env-file "${{ steps.env.outputs.path }}" \
+            --add-host=host.docker.internal:host-gateway \
             "$IMAGE:${{ github.sha }}" \
             node_modules/.bin/zen migrate deploy
 
@@ -159,6 +160,7 @@ jobs:
             --name "${IMAGE}-$TARGET" \
             --restart unless-stopped \
             --env-file "${{ steps.env.outputs.path }}" \
+            --add-host=host.docker.internal:host-gateway \
             -p "127.0.0.1:$TARGET_PORT:3000" \
             "$IMAGE:${{ github.sha }}"
 
