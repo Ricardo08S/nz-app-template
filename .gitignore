@@ -15,3 +15,6 @@ package-lock.json
 /proxy
 
 /references
+
+# docker-compose.services.yml reads this for POSTGRES_PASSWORD/GARAGE_RPC_SECRET/etc.
+/.env

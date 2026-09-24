@@ -48,12 +48,6 @@ model User with Base {
 
   RefreshToken         RefreshToken[]
   File                 File[]
-  QuizAttempt          QuizAttempt[]
-  ClassMember          ClassMember[]
-  AssignmentSubmission AssignmentSubmission[]
-  AssessmentScore      AssessmentScore[]
-  ClassContentComment  ClassContentComment[]
-  Report               Report[]
 
   @@allow('read', true)
   @@allow('create', auth().role == ADMIN)
@@ -77,10 +71,6 @@ model File with Timestamps {
   contentType          String
   size                 Int?
   status               FileStatus
-
-  AssignmentSubmission AssignmentSubmission[]
-  Report               Report[]
-  ClassAsset           ClassAsset[]
 
   @@allow('read', true)
   @@allow('all', auth().id == userId)

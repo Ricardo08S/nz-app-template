@@ -1,21 +1,6 @@
-# Blue-green deploy of apps/server, behind a natively-installed Caddy — no
-# image registry, no separate build job: the self-hosted runner builds the
-# image and runs it in place, since the runner IS the deploy target.
-#
-# One-time VPS setup (not done by this workflow — see README's Deployment
-# section): install docker + a native Caddy (reloaded via `caddy reload`,
-# no sudo/systemd needed) + sops, put the runner's age key where sops can
-# find it, register the runner's SOPS_AGE_KEY (or SOPS_AGE_KEY_FILE) and
-# push `deploy/env/<env>.env` values as needed.
-#
-# Strategy: two containers (blue/green, ports from deploy/env/<env>.env),
-# both bound to 127.0.0.1 only. A state file on the runner tracks which slot
-# is live. Each deploy builds the image, runs migrations once, boots the
-# *other* slot, health-checks it via /health/ready, flips Caddy's upstream,
-# verifies /health/version through the public domain, then removes the old
-# slot. Any failure before the Caddy flip leaves the old slot serving
-# untouched — safe by default, no separate rollback script needed (redeploy
-# the last-good commit to go back).
+# Blue-green deploy of apps/server, no image registry — the self-hosted
+# runner builds the image and deploys it in place. One-time VPS setup
+# (Caddy, sops, runner registration) is in README's Deployment section.
 
 name: Deploy server (blue-green)
 
@@ -45,20 +30,22 @@ jobs:
 
       - name: Load app env
         run: |
-          set -a; source "deploy/env/${APP_ENV}.env"; set +a
+          ENV_FILE="deploy/env/${APP_ENV}.env"
+          set -a; source "$ENV_FILE"; set +a
+          grep -vE '^\s*#|^\s*$' "$ENV_FILE" >>"$GITHUB_ENV"
           {
-            echo "APP_NAME=$APP_NAME"
-            echo "BASE_DOMAIN=$BASE_DOMAIN"
-            echo "CADDYFILE=$CADDYFILE"
-            echo "CADDY_APPS_DIR=$CADDY_APPS_DIR"
-            echo "CADDY_BIN=$CADDY_BIN"
-            echo "STATE_DIR=${STATE_DIR}"
             echo "BLUE_PORT=$SERVER_BLUE_PORT"
             echo "GREEN_PORT=$SERVER_GREEN_PORT"
             echo "IMAGE=${APP_NAME}-server"
             echo "PUBLIC_DOMAIN=${APP_NAME}-${APP_ENV}-server.${BASE_DOMAIN}"
             echo "PUBLIC_HEALTH_URL=https://${APP_NAME}-${APP_ENV}-server.${BASE_DOMAIN}/health/version"
           } >> "$GITHUB_ENV"
+
+          if docker network inspect nz-app-template-services >/dev/null 2>&1; then
+            echo "DOCKER_NETWORK_ARGS=--network nz-app-template-services" >> "$GITHUB_ENV"
+          else
+            echo "DOCKER_NETWORK_ARGS=" >> "$GITHUB_ENV"
+          fi
 
       - name: Resolve blue/green slots
         id: slots
@@ -87,9 +74,7 @@ jobs:
           set -euo pipefail
           CADDY_SNIPPET="${{ steps.slots.outputs.caddy_snippet }}"
           [ -f "$CADDY_SNIPPET" ] || printf 'reverse_proxy 127.0.0.1:%s\n' "${{ steps.slots.outputs.current_port }}" >"$CADDY_SNIPPET"
-          # Never write to $CADDYFILE directly — it's the shared system Caddyfile,
-          # other tenants' blocks live there too. We only own our file under
-          # CADDY_APPS_DIR, which $CADDYFILE imports (set up once, outside this repo).
+          # $CADDYFILE is shared with other tenants — never write to it directly.
           mkdir -p "$CADDY_APPS_DIR"
           printf '%s {\n  import %s\n}\n' "$PUBLIC_DOMAIN" "$CADDY_SNIPPET" >"$CADDY_APPS_DIR/${PUBLIC_DOMAIN}.caddy"
 
@@ -106,11 +91,6 @@ jobs:
           ENV_TMP=$(mktemp)
           sops -d "apps/server/.env.${APP_ENV}.enc" >"$ENV_TMP"
 
-          # docker --env-file does not strip quotes or expand $VARS like a shell
-          # would, but our .env values use both (e.g. DATABASE_URL contains
-          # "...$APP_NAME-$APP_ENV"). Resolve via sed (de-quote) + envsubst
-          # (expand refs) — plain text substitution, never eval/source the
-          # decrypted content as shell code.
           DEQUOTED_TMP=$(mktemp)
           sed -E 's/^([A-Za-z_][A-Za-z0-9_]*)="(.*)"$/\1=\2/' "$ENV_TMP" >"$DEQUOTED_TMP"
           rm -f "$ENV_TMP"
@@ -146,6 +126,7 @@ jobs:
       - name: Run database migrations
         run: |
           docker run --rm --env-file "${{ steps.env.outputs.path }}" \
+            $DOCKER_NETWORK_ARGS \
             "$IMAGE:${{ github.sha }}" \
             node_modules/.bin/zen migrate deploy
 
@@ -159,6 +140,7 @@ jobs:
             --name "${IMAGE}-$TARGET" \
             --restart unless-stopped \
             --env-file "${{ steps.env.outputs.path }}" \
+            $DOCKER_NETWORK_ARGS \
             -p "127.0.0.1:$TARGET_PORT:3000" \
             "$IMAGE:${{ github.sha }}"
 
