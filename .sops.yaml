@@ -4,6 +4,6 @@
 creation_rules:
   - path_regex: \.enc$
     age: >-
-      age1REPLACE_WITH_DEVELOPER_PUBLIC_KEY,
-      age1REPLACE_WITH_CI_PUBLIC_KEY,
-      age1REPLACE_WITH_PRODUCTION_HOST_PUBLIC_KEY
+      age1nmqvfy9c0mtfx70pul0aa69gmngf6pmrqhh6pusug0yppx5ru9qsfkvyhg,
+      age1nmqvfy9c0mtfx70pul0aa69gmngf6pmrqhh6pusug0yppx5ru9qsfkvyhg,
+      age1nmqvfy9c0mtfx70pul0aa69gmngf6pmrqhh6pusug0yppx5ru9qsfkvyhg

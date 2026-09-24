@@ -119,7 +119,7 @@ Deployment section for the full first-time walkthrough; this is the code map.
   old slot. A failure before the Caddy reload leaves the previously-live slot untouched — safe by
   default, no separate rollback script.
 - **`deploy/env/<env>.env`** — plaintext, non-secret, one file per environment: `APP_NAME`,
-  `APP_ENV`, `BASE_DOMAIN`, `ACME_EMAIL`, `CENTRAL_S3_DOMAIN`, Caddy paths (`CADDYFILE`,
+  `APP_ENV`, `BASE_DOMAIN`, `CENTRAL_S3_DOMAIN`, Caddy paths (`CADDYFILE`,
   `CADDY_APPS_DIR`, `CADDY_BIN`, `STATE_DIR`), and the four blue/green ports.
 - **Caddy owns 80/443 directly, standalone** — no nginx or other reverse proxy in front of it. It
   gets its own Let's Encrypt certs and does the blue/green slot switching. This means it must be

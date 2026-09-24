@@ -55,9 +55,9 @@ Edit `deploy/env/production.env` (plaintext, no secrets — committed to git):
 ```
 APP_NAME=your-real-app-name
 BASE_DOMAIN=your-real-domain.com
-ACME_EMAIL=you@your-real-email.com
 CENTRAL_S3_DOMAIN=s3.your-domain.com    # the shared Garage instance's public domain
-CADDYFILE=/home/<runner-user>/kode/Caddyfile
+CADDYFILE=/etc/caddy/Caddyfile          # the real system Caddyfile — see "Edge proxy" below
+CADDY_APPS_DIR=/etc/caddy/apps
 CADDY_BIN=/usr/bin/caddy
 STATE_DIR=/home/<runner-user>/kode/running-prod/your-real-app-name-production-deploy-state
 SERVER_BLUE_PORT=... SERVER_GREEN_PORT=... WEB_BLUE_PORT=... WEB_GREEN_PORT=...   # pick 4 free ports
