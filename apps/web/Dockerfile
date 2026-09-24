@@ -7,16 +7,20 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/
 # web depends on server via a workspace link (apps/web/package.json's
-# "server": "link:../server"), so server's package.json must be present
-# too — --filter=web... pulls in exactly that, nothing more.
+# "server": "link:../server"), so server's package.json must be present too.
 COPY apps/server/package.json ./apps/server/
 
-# Build the web app. Final image (Caddy) never ships node_modules, so unlike
-# server there's no need for a separate --prod deps stage — just cache the
-# install.
+# Build the web app. No --filter here: web imports server's source directly
+# (apps/server/src/shared) and Vite's transform resolves tsconfig chains
+# against wherever that source physically lives, including server's own
+# devDependencies (e.g. @tsconfig/node22) — --filter=web... only pulls in
+# server's runtime deps, not those, and the build fails looking for a
+# tsconfig that isn't installed. Final image (Caddy) never ships
+# node_modules, so unlike server there's no need for a --prod deps stage —
+# just cache the install.
 FROM base AS build
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --filter=web...
+    pnpm install --frozen-lockfile
 COPY . .
 WORKDIR /app/apps/web
 RUN pnpm build
