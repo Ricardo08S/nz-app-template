@@ -31,10 +31,7 @@ jobs:
         run: |
           ENV_FILE="deploy/env/${APP_ENV}.env"
           set -a; source "$ENV_FILE"; set +a
-          # Pass every var in the file through as-is — one source of truth,
-          # nothing to keep in sync here when deploy/env/*.env changes.
           grep -vE '^\s*#|^\s*$' "$ENV_FILE" >>"$GITHUB_ENV"
-          # Only genuinely derived values (not plain renames) need spelling out.
           {
             echo "BLUE_PORT=$WEB_BLUE_PORT"
             echo "GREEN_PORT=$WEB_GREEN_PORT"
@@ -71,9 +68,7 @@ jobs:
           set -euo pipefail
           CADDY_SNIPPET="${{ steps.slots.outputs.caddy_snippet }}"
           [ -f "$CADDY_SNIPPET" ] || printf 'reverse_proxy 127.0.0.1:%s\n' "${{ steps.slots.outputs.current_port }}" >"$CADDY_SNIPPET"
-          # Never write to $CADDYFILE directly — it's the shared system Caddyfile,
-          # other tenants' blocks live there too. We only own our file under
-          # CADDY_APPS_DIR, which $CADDYFILE imports (set up once, outside this repo).
+          # $CADDYFILE is shared with other tenants — never write to it directly.
           mkdir -p "$CADDY_APPS_DIR"
           printf '%s {\n  import %s\n}\n' "$PUBLIC_DOMAIN" "$CADDY_SNIPPET" >"$CADDY_APPS_DIR/${PUBLIC_DOMAIN}.caddy"
 

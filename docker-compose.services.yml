@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nz-app-template-password-default}
       POSTGRES_DB: ${POSTGRES_DB:-nz-app-template}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -19,19 +19,15 @@ services:
       timeout: 5s
       retries: 5
 
-  # Replaces MinIO: its community edition was archived in April 2026 and stopped
-  # shipping images in October 2025. Garage speaks the same S3 API.
   garage:
     image: dxflrs/garage:v2.3.0
     container_name: nz-app-template-garage
     restart: unless-stopped
     environment:
-      # Local only. Production takes this from SOPS.
       GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
     ports:
-      # 3900 = S3 API (signed), 3902 = web endpoint (anonymous reads).
-      - "${GARAGE_S3_PORT:-3900}:3900"
-      - "${GARAGE_WEB_PORT:-3902}:3902"
+      - "127.0.0.1:${GARAGE_S3_PORT:-3900}:3900"
+      - "127.0.0.1:${GARAGE_WEB_PORT:-3902}:3902"
     volumes:
       - ./deploy/garage.toml:/etc/garage.toml:ro
       - garage_meta:/var/lib/garage/meta
@@ -46,10 +42,10 @@ services:
 
 networks:
   app-network:
+    name: nz-app-template-services
     driver: bridge
 
 volumes:
   postgres_data:
-  # Metadata and data are separate stores; both must be backed up.
   garage_meta:
   garage_data:
