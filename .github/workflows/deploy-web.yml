@@ -6,7 +6,7 @@ name: Deploy web (blue-green)
 
 on:
   push:
-    branches: [production, staging]
+    branches: [production, staging, test-app]
     paths:
       - apps/web/**
       - deploy/env/*.env
