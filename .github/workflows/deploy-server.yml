@@ -45,14 +45,13 @@ jobs:
 
       - name: Load app env
         run: |
-          set -a; source "deploy/env/${APP_ENV}.env"; set +a
+          ENV_FILE="deploy/env/${APP_ENV}.env"
+          set -a; source "$ENV_FILE"; set +a
+          # Pass every var in the file through as-is — one source of truth,
+          # nothing to keep in sync here when deploy/env/*.env changes.
+          grep -vE '^\s*#|^\s*$' "$ENV_FILE" >>"$GITHUB_ENV"
+          # Only genuinely derived values (not plain renames) need spelling out.
           {
-            echo "APP_NAME=$APP_NAME"
-            echo "BASE_DOMAIN=$BASE_DOMAIN"
-            echo "CADDYFILE=$CADDYFILE"
-            echo "CADDY_APPS_DIR=$CADDY_APPS_DIR"
-            echo "CADDY_BIN=$CADDY_BIN"
-            echo "STATE_DIR=${STATE_DIR}"
             echo "BLUE_PORT=$SERVER_BLUE_PORT"
             echo "GREEN_PORT=$SERVER_GREEN_PORT"
             echo "IMAGE=${APP_NAME}-server"
