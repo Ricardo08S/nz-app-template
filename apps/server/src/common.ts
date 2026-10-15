@@ -1,9 +1,9 @@
 import { TRPCError } from "@trpc/server";
-import type { Context } from "./context";
-import { env } from "./env";
-import { bcrypt, jwt, z, type SignOptions } from "./lib";
-import { jwtPayloadV, type JWTPayload } from "./shared/jwt";
-import type { User } from "./zenstack/models";
+import type { Context } from "./context.js";
+import { env } from "./env.js";
+import { bcrypt, jwt, z } from "./lib.js";
+import { jwtPayloadV, type JWTPayload } from "./shared/jwt.js";
+import type { User } from "./zenstack/models.js";
 
 export const unauthorizedError = new TRPCError({
   code: "UNAUTHORIZED",
@@ -17,9 +17,7 @@ export const forbiddenError = new TRPCError({
 
 export const buildAccessToken = (payload: JWTPayload): string => {
   const token = jwt.sign(payload, env.JWT_ACCESS_KEY, {
-    // env value is a plain string; jsonwebtoken narrows to a template-literal
-    // union it can't verify statically, so cast to that exact field's type.
-    expiresIn: env.JWT_ACCESS_EXPIRES_IN as SignOptions["expiresIn"],
+    expiresIn: env.JWT_ACCESS_EXPIRES_IN as any,
   });
   return token;
 };
@@ -35,7 +33,14 @@ export const verifyAccessToken = (token: string): JWTPayload | null => {
   }
 };
 
-export const buildRefreshToken = async (ctx: Context, userId: string) => {
+// `impersonation` is the actor (admin) user id, carried as a signed claim on
+// the refresh JWT, so refresh can re-issue impersonation tokens without a
+// schema change.
+export const buildRefreshToken = async (
+  ctx: Context,
+  userId: string,
+  impersonation?: string,
+) => {
   const { db } = ctx;
   const refreshToken = await db.refreshToken.create({
     data: {
@@ -43,16 +48,22 @@ export const buildRefreshToken = async (ctx: Context, userId: string) => {
       revoked: false,
     },
   });
-  const token = jwt.sign({ id: refreshToken.id }, env.JWT_REFRESH_KEY, {
-    expiresIn: env.JWT_REFRESH_EXPIRES_IN as SignOptions["expiresIn"],
-  });
+  const token = jwt.sign(
+    { id: refreshToken.id, ...(impersonation ? { impersonation } : {}) },
+    env.JWT_REFRESH_KEY,
+    { expiresIn: env.JWT_REFRESH_EXPIRES_IN as any },
+  );
   return token;
 };
 
 export const verifyRefreshToken = (token: string) => {
   const payload = jwt.verify(token, env.JWT_REFRESH_KEY);
-  const refreshTokenId = z.object({ id: z.string().nonempty() }).parse(payload);
-  return refreshTokenId;
+  return z
+    .object({
+      id: z.string().nonempty(),
+      impersonation: z.string().optional(),
+    })
+    .parse(payload);
 };
 
 const SALT_ROUNDS = 12;
@@ -61,44 +72,22 @@ export const hashPassword = (password: string): string => {
   return bcrypt.hashSync(password, SALT_ROUNDS);
 };
 
-/** oidc_userInfo is untyped Json - narrow the one field we actually use. */
-export const oidcPicture = (userInfo: unknown): string | undefined => {
-  if (
-    typeof userInfo === "object" &&
-    userInfo !== null &&
-    "picture" in userInfo &&
-    typeof userInfo.picture === "string"
-  ) {
-    return userInfo.picture;
-  }
-  return undefined;
-};
-
-// Was `new Set(...a, ...b)` - Set's constructor takes one iterable, not
-// variadic args, so every element past the first became a stray extra
-// constructor arg (silently ignored) and a lone string got split into
-// characters. Wrap the spreads in an array so both lists actually merge.
-export const mergePermissions = (a: string[], b: string[]): string[] => [
-  ...new Set([...a, ...b]),
-];
-
-export const generateTokensFromUser = async (ctx: Context, user: User) => {
-  const rolePermissions = await ctx.db.rolePermission.findUnique({
-    where: {
-      role: user.role,
-    },
-  });
+export const generateTokensFromUser = async (
+  ctx: Context,
+  user: User,
+  impersonation?: string,
+) => {
   const accessToken = buildAccessToken({
     id: user.id,
     username: user.username,
     name: user.name,
     role: user.role,
     email: user.email ?? undefined,
-    image: oidcPicture(user.oidc_userInfo),
-    permissions: mergePermissions(user.permissions, rolePermissions?.permissions ?? []),
+    image: (user.oidc_userInfo as any)?.picture ?? undefined,
+    ...(impersonation ? { impersonation } : {}),
   });
 
-  const refreshToken = await buildRefreshToken(ctx, user.id);
+  const refreshToken = await buildRefreshToken(ctx, user.id, impersonation);
 
   return { accessToken, refreshToken };
 };

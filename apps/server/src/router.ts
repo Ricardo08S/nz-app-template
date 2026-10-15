@@ -1,20 +1,21 @@
-import { changePassword } from "./functions/change-password.ts";
-import { confirmUpload, getUploadUrl } from "./functions/file-upload.ts";
-import { hello } from "./functions/hello.ts";
+import { changePassword } from "./functions/change-password.js";
+import { confirmUpload, getUploadUrl } from "./functions/file-upload.js";
+import { hello } from "./functions/hello.js";
+import { impersonate, stopImpersonating } from "./functions/impersonate.js";
 import { login } from "./functions/login.js";
-import { me } from "./functions/me.ts";
+import { me } from "./functions/me.js";
 import {
   oidcHandleCallback,
   oidcInitiateLogin,
   oidcLogout,
   oidcUserInfo,
 } from "./functions/oidc.js";
-import { refresh } from "./functions/refresh.ts";
-import { register } from "./functions/register.ts";
-import { setupPassword } from "./functions/setup-password.ts";
-import { t } from "./trpc.ts";
+import { refresh } from "./functions/refresh.js";
+import { register } from "./functions/register.js";
+import { t } from "./trpc.js";
 import { createZenStackRouter } from "zenstack-trpc";
-import { schema } from "./zenstack/schema.ts";
+import { schema } from "./zenstack/schema.js";
+import type { AnyRouter } from "@trpc/server";
 
 export const appRouter = t.router({
   hello,
@@ -25,12 +26,13 @@ export const appRouter = t.router({
   oidcLogout,
   oidcUserInfo,
   me,
+  impersonate,
+  stopImpersonating,
   refresh,
   changePassword,
-  setupPassword,
   getUploadUrl,
   confirmUpload,
-  crud: createZenStackRouter(schema, t),
+  crud: createZenStackRouter(schema, t) as unknown as AnyRouter,
 });
 
 export type AppRouter = typeof appRouter;

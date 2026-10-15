@@ -1,5 +1,4 @@
 node_modules
 dist
+# All env lives encrypted in deploy/env — see SOPS_GUIDE.md
 .env*
-!.env.template
-!.env.*.enc

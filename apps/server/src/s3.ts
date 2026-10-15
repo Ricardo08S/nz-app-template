@@ -2,7 +2,6 @@ import {
   S3Client,
   PutObjectCommand,
   HeadObjectCommand,
-  type HeadObjectCommandOutput,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { TRPCError } from "@trpc/server";
@@ -16,14 +15,9 @@ export const s3 = new S3Client({
     accessKeyId: env.AWS_ACCESS_KEY_ID,
     secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
   },
-  // The SDK adds a CRC32 checksum by default, but a presigned URL is signed
-  // before the body exists, so it ships a zero checksum that S3-compatible
-  // servers reject with InvalidDigest.
-  requestChecksumCalculation: "WHEN_REQUIRED",
-  responseChecksumValidation: "WHEN_REQUIRED",
   ...(env.AWS_S3_ENDPOINT && {
     endpoint: env.AWS_S3_ENDPOINT,
-    forcePathStyle: true, // Required for Garage, MinIO and LocalStack
+    forcePathStyle: true, // Required for MinIO and LocalStack
   }),
 });
 
@@ -77,9 +71,9 @@ export const generateFileKey = (
  * Get the public URL for a file
  */
 export const getFileUrl = (key: string): string => {
-  // Must not use AWS_S3_ENDPOINT: that one requires a signature for GetObject.
-  if (env.PUBLIC_S3_ENDPOINT) {
-    return `${env.PUBLIC_S3_ENDPOINT}/${key}`;
+  if (env.AWS_S3_ENDPOINT) {
+    // For MinIO or custom endpoints
+    return `${env.AWS_S3_ENDPOINT}/${env.AWS_S3_BUCKET}/${key}`;
   }
   // For AWS S3
   return `https://${env.AWS_S3_BUCKET}.s3.${env.AWS_REGION}.amazonaws.com/${key}`;
@@ -91,34 +85,32 @@ export const getFileUrl = (key: string): string => {
 export const getFileSize = async (
   key: string,
 ): Promise<{ size: number; contentType: string }> => {
-  // Only the S3 call itself falls back to a generic "does not exist" - the
-  // two validation throws below must propagate with their own message, not
-  // get swallowed by the same catch.
-  let res: HeadObjectCommandOutput;
   try {
-    res = await s3.send(new HeadObjectCommand({ Bucket: env.AWS_S3_BUCKET, Key: key }));
+    const headCommand = new HeadObjectCommand({
+      Bucket: env.AWS_S3_BUCKET,
+      Key: key,
+    });
+    const res = await s3.send(headCommand);
+    if (res.ContentLength === undefined) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `File with key ${key} does not have Content-Length.`,
+      });
+    }
+    if (!res.ContentType) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `File with key ${key} does not have Content-Type.`,
+      });
+    }
+    return {
+      size: res.ContentLength,
+      contentType: res.ContentType,
+    };
   } catch (error) {
-    console.error(`HeadObject failed for key ${key}:`, error);
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: `File with key ${key} does not exist in S3`,
     });
   }
-
-  if (res.ContentLength === undefined) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: `File with key ${key} does not have Content-Length.`,
-    });
-  }
-  if (!res.ContentType) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: `File with key ${key} does not have Content-Type.`,
-    });
-  }
-  return {
-    size: res.ContentLength,
-    contentType: res.ContentType,
-  };
 };

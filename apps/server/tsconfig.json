@@ -12,10 +12,10 @@
     "moduleResolution": "NodeNext",
     "module": "NodeNext",
     "target": "esnext",
-    "rootDir": ".",
+    "rootDir": "src",
     "outDir": "dist",
-    "noEmit": true,
-    "disableSourceOfProjectReferenceRedirect": true
+    "disableSourceOfProjectReferenceRedirect": true,
+    "allowImportingTsExtensions": true
   },
-  "include": ["src", "tests", "vitest.config.ts", "vitest.setup.ts"]
+  "include": ["src"]
 }

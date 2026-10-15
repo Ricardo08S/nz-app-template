@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
-import { unauthorizedError, hashPassword } from "../common";
-import { bcrypt, z } from "../lib";
-import { tuser } from "../trpc";
+import { unauthorizedError, hashPassword } from "../common.js";
+import { bcrypt, z } from "../lib.js";
+import { tuser } from "../trpc.js";
 
 export const changePassword = tuser
   .input(
@@ -17,14 +17,14 @@ export const changePassword = tuser
 
     const found = await db.user.findUnique({
       where: { username: user.username },
-      select: { username: true, passwordHash: true },
+      select: { username: true, password: true },
     });
-    if (!found?.passwordHash) {
+    if (!found?.password) {
       throw unauthorizedError;
     }
 
     // old must match
-    if (!bcrypt.compareSync(input.oldPassword, found.passwordHash)) {
+    if (!bcrypt.compareSync(input.oldPassword, found.password)) {
       throw new TRPCError({
         code: "UNAUTHORIZED",
         message: "Wrong old password.",
@@ -32,7 +32,7 @@ export const changePassword = tuser
     }
 
     // new must be different from old
-    if (bcrypt.compareSync(input.newPassword, found.passwordHash)) {
+    if (bcrypt.compareSync(input.newPassword, found.password)) {
       throw new TRPCError({
         code: "BAD_REQUEST",
         message: "New password must be different from the old password.",
@@ -45,9 +45,9 @@ export const changePassword = tuser
       data: { passwordHash: newHashed },
     });
 
-    // Never log input verbatim - it's the old/new plaintext passwords, and
-    // logs go to stdout/Loki, which far more people can read than the DB.
-    log.info(`changePassword`, { username: found.username });
+    log.info(`changePassword`, {
+      input,
+    });
 
     return { success: true };
   });

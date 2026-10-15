@@ -5,7 +5,7 @@ import { type JsonObject, type trpcExpress } from "./lib.js";
 import { createLog } from "./log.js";
 import { s3 } from "./s3.js";
 import type { JWTPayload } from "./shared/jwt.js";
-import type { SchemaType } from "./zenstack/schema";
+import type { SchemaType } from "./zenstack/schema.js";
 
 const getUserFromToken = (token: string | undefined): JWTPayload | null => {
   if (!token) {
@@ -51,7 +51,8 @@ export const createContext = async ({
 };
 export type Context = Awaited<ReturnType<typeof createContext>>;
 
-export const getClient: ExpressMiddlewareOptions<SchemaType>["getClient"] = async (req) => {
-  const user = getUserFromToken(req.headers.authorization);
-  return authDb.$setAuth(user ?? undefined);
-};
+export const getClient: ExpressMiddlewareOptions<SchemaType>["getClient"] =
+  async (req) => {
+    const user = getUserFromToken(req.headers.authorization);
+    return authDb.$setAuth(user ?? undefined);
+  };

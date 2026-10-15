@@ -8,7 +8,6 @@ export type { JsonValue, JsonObject, JsonArray } from "@zenstackhq/orm";
 export { cors };
 export { default as bcrypt } from "bcrypt";
 export { default as jwt } from "jsonwebtoken";
-export type { SignOptions } from "jsonwebtoken";
 export { default as axios } from "axios";
 export function sleep(ms: number): Promise<void> {
   return new Promise<void>((res) => setTimeout(res, ms));

@@ -1,0 +1,178 @@
+# Blue-green deploy / rollback for one app (server or web), called by
+# deploy-server.yml, deploy-web.yml and rollback.yml. The self-hosted runner
+# builds and runs the image in place — no registry. Settings come from
+# deploy/vars/<branch>.env, secrets from deploy/env/<branch>.<app>.env.enc
+# (both written by scripts/bootstrap.sh). The previous slot keeps running
+# after a cutover so rollback.yml can flip back to it.
+name: _deploy
+
+on:
+  workflow_call:
+    inputs:
+      app:
+        type: string
+        required: true
+      mode:
+        type: string
+        default: deploy
+
+jobs:
+  run:
+    runs-on: self-hosted
+    concurrency:
+      group: deploy-${{ inputs.app }}-${{ github.ref_name }}
+      cancel-in-progress: false
+    env:
+      APP: ${{ inputs.app }}
+      APP_ENV: ${{ github.ref_name }}
+      MODE: ${{ inputs.mode }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Load config
+        run: |
+          set -euo pipefail
+          VARS="deploy/vars/$APP_ENV.env"
+          set -a; . "./$VARS"; set +a
+          grep -vE '^\s*#|^\s*$' "$VARS" >>"$GITHUB_ENV"
+          NAME="$APP_NAME-$APP_ENV"
+          if [ "$APP" = server ]; then
+            DOMAIN="$NAME-server.$BASE_DOMAIN"; CONTAINER_PORT=3000; HEALTH_PATH=/health
+          else
+            DOMAIN="$NAME.$BASE_DOMAIN"; CONTAINER_PORT=80; HEALTH_PATH=/health/live
+          fi
+          NET=""
+          docker network inspect nz-app-template-services >/dev/null 2>&1 && NET="--network nz-app-template-services"
+          {
+            echo "IMAGE=$NAME-$APP"
+            echo "SLOT_DIR=$STATE_DIR/$NAME-$APP"
+            echo "DOMAIN=$DOMAIN"
+            echo "CONTAINER_PORT=$CONTAINER_PORT"
+            echo "HEALTH_PATH=$HEALTH_PATH"
+            echo "DOCKER_NETWORK_ARGS=$NET"
+          } >>"$GITHUB_ENV"
+
+      - name: Resolve slots
+        id: slots
+        run: |
+          set -euo pipefail
+          mkdir -p "$SLOT_DIR"
+          free_port() {
+            local p
+            while :; do
+              p=$(shuf -i 20000-60000 -n 1)
+              [ "$p" = "${1:-}" ] && continue
+              ss -ltn | awk '{print $4}' | grep -q ":$p\$" || { echo "$p"; return; }
+            done
+          }
+          if [ -f "$SLOT_DIR/ports.env" ]; then
+            . "$SLOT_DIR/ports.env"
+          elif [ "$MODE" = rollback ]; then
+            echo "::error::$IMAGE has never been deployed — nothing to roll back to."; exit 1
+          else
+            BLUE_PORT=$(free_port); GREEN_PORT=$(free_port "$BLUE_PORT")
+            printf 'BLUE_PORT=%s\nGREEN_PORT=%s\n' "$BLUE_PORT" "$GREEN_PORT" >"$SLOT_DIR/ports.env"
+          fi
+          CURRENT=$(cat "$SLOT_DIR/active_slot" 2>/dev/null || echo green)
+          if [ "$CURRENT" = blue ]; then TARGET=green; PORT=$GREEN_PORT; else TARGET=blue; PORT=$BLUE_PORT; fi
+          printf 'current=%s\ntarget=%s\nport=%s\n' "$CURRENT" "$TARGET" "$PORT" >>"$GITHUB_OUTPUT"
+          echo "$MODE $IMAGE: live '$CURRENT' -> '$TARGET' (port $PORT)"
+
+      - name: Ensure Caddy site blocks
+        if: inputs.mode == 'deploy'
+        run: |
+          set -euo pipefail
+          [ -f "$SLOT_DIR/slot.caddy" ] || echo "reverse_proxy 127.0.0.1:${{ steps.slots.outputs.port }}" >"$SLOT_DIR/slot.caddy"
+          # $CADDYFILE is shared with other tenants — never write to it directly.
+          printf '%s {\n  import %s\n}\n' "$DOMAIN" "$SLOT_DIR/slot.caddy" >"$CADDY_APPS_DIR/$DOMAIN.caddy"
+          if [ "$APP" = server ] && [ -n "${S3_DOMAIN:-}" ]; then
+            printf '%s {\n  reverse_proxy 127.0.0.1:9000\n}\n' "$S3_DOMAIN" >"$CADDY_APPS_DIR/$S3_DOMAIN.caddy"
+          fi
+
+      - name: Build image
+        if: inputs.mode == 'deploy'
+        run: docker build -f "apps/$APP/Dockerfile" -t "$IMAGE:${{ github.sha }}" .
+
+      - name: Decrypt env
+        if: inputs.mode == 'deploy'
+        id: env
+        run: |
+          set -euo pipefail
+          RAW=$(mktemp)
+          sops -d "deploy/env/$APP_ENV.$APP.env.enc" >"$RAW"
+          # docker --env-file neither strips quotes nor expands $VARS; de-quote with
+          # sed and expand with envsubst — never source decrypted content as shell.
+          DEQUOTED=$(mktemp)
+          sed -E 's/^([A-Za-z_][A-Za-z0-9_]*)="(.*)"$/\1=\2/' "$RAW" >"$DEQUOTED"
+          rm -f "$RAW"
+          while IFS= read -r line; do
+            case "$line" in ''|'#'*) continue ;; esac
+            export "$line"
+          done <"$DEQUOTED"
+          RESOLVED=$(mktemp)
+          envsubst <"$DEQUOTED" >"$RESOLVED"
+          rm -f "$DEQUOTED"
+          echo "path=$RESOLVED" >>"$GITHUB_OUTPUT"
+
+      - name: Run database migrations
+        if: inputs.mode == 'deploy' && inputs.app == 'server'
+        run: |
+          docker run --rm --env-file "${{ steps.env.outputs.path }}" $DOCKER_NETWORK_ARGS \
+            "$IMAGE:${{ github.sha }}" node_modules/.bin/zen migrate deploy
+
+      - name: Start target slot
+        if: inputs.mode == 'deploy'
+        run: |
+          set -euo pipefail
+          C="$IMAGE-${{ steps.slots.outputs.target }}"
+          docker rm -f "$C" >/dev/null 2>&1 || true
+          docker run -d --name "$C" --restart unless-stopped \
+            --env-file "${{ steps.env.outputs.path }}" $DOCKER_NETWORK_ARGS \
+            -p "127.0.0.1:${{ steps.slots.outputs.port }}:$CONTAINER_PORT" \
+            "$IMAGE:${{ github.sha }}"
+
+      - name: Check target slot is running
+        if: inputs.mode == 'rollback'
+        run: |
+          docker ps -q --filter "name=^$IMAGE-${{ steps.slots.outputs.target }}\$" --filter status=running | grep -q . || {
+            echo "::error::Slot '${{ steps.slots.outputs.target }}' isn't running — redeploy instead."; exit 1; }
+
+      - name: Health check target slot
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            curl -fsS "http://127.0.0.1:${{ steps.slots.outputs.port }}$HEALTH_PATH" >/dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          C="$IMAGE-${{ steps.slots.outputs.target }}"
+          echo "::error::$C failed its health check; live slot left untouched."
+          docker logs --tail 100 "$C" || true
+          [ "$MODE" = deploy ] && docker rm -f "$C" || true
+          exit 1
+
+      - name: Cut over Caddy
+        run: |
+          set -euo pipefail
+          echo "reverse_proxy 127.0.0.1:${{ steps.slots.outputs.port }}" >"$SLOT_DIR/slot.caddy"
+          "$CADDY_BIN" validate --config "$CADDYFILE"
+          "$CADDY_BIN" reload --config "$CADDYFILE"
+
+      - name: Verify public endpoint
+        run: |
+          for i in $(seq 1 15); do
+            curl -fsS "https://$DOMAIN$HEALTH_PATH" >/dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          echo "::error::https://$DOMAIN$HEALTH_PATH unreachable after cutover — check DNS."
+          exit 1
+
+      - name: Persist active slot
+        run: echo "${{ steps.slots.outputs.target }}" >"$SLOT_DIR/active_slot"
+
+      - name: Clean up decrypted env
+        if: always() && inputs.mode == 'deploy'
+        run: rm -f "${{ steps.env.outputs.path }}"
+
+      - name: Prune old images
+        if: inputs.mode == 'deploy'
+        run: docker image prune -f --filter "until=72h" || true

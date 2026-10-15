@@ -10,7 +10,7 @@ import {
 import SuperJSON from "superjson";
 import type { AppRouter } from "../../../server/src/router";
 import type { SchemaType } from "../../../server/src/zenstack/schema";
-import { config as env } from "$lib/config";
+import { env } from "$env/dynamic/public";
 import { token } from "./stores/token.svelte";
 import { myFetch, myFetchNoRefresh } from "./my-fetch.svelte";
 import { typedClient, type WithZenStack, type WithClient } from "zenstack-trpc";

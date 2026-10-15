@@ -1,0 +1,16 @@
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        type: choice
+        options: [server, web]
+        required: true
+
+jobs:
+  rollback:
+    uses: ./.github/workflows/_deploy.yml
+    with:
+      app: ${{ inputs.app }}
+      mode: rollback

@@ -38,9 +38,7 @@ export const register = t.procedure
 
     const tokens = await generateTokensFromUser(ctx, user);
 
-    // Never log input/tokens verbatim - input.password is plaintext, and
-    // logs go to stdout/Loki, which far more people can read than the DB.
-    log.info(`trpc.register`, { username: user.username });
+    log.info(`trpc.register`, { input, tokens });
 
     return tokens;
   });

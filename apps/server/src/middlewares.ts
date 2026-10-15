@@ -1,7 +1,7 @@
-import { forbiddenError } from "./common";
-import { JWTPayload } from "./shared/jwt";
-import { t } from "./trpc";
-import { Role } from "./zenstack/models";
+import { forbiddenError } from "./common.js";
+import { JWTPayload } from "./shared/jwt.js";
+import { t } from "./trpc.js";
+import { Role } from "./zenstack/models.js";
 
 export const checkUser = (fn: (user: JWTPayload) => boolean) => {
   return t.middleware(({ ctx: { user }, next }) => {

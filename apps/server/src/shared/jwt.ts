@@ -1,6 +1,4 @@
-import { SchemaType as $Schema } from "../zenstack/schema.js";
-import { z } from ".";
-import { Role, type AuthInfo } from "../zenstack/models";
+import { z } from "./index.js";
 
 export const jwtPayloadV = z.object({
   id: z.string(),
@@ -8,18 +6,9 @@ export const jwtPayloadV = z.object({
   name: z.string(),
   email: z.string().optional(),
   image: z.string().optional(),
-  role: z.enum(Role),
-  permissions: z.string().array(),
+  role: z.enum(["ADMIN", "USER"]),
+  impersonation: z.string().optional(),
 });
 export type JWTPayload = z.infer<typeof jwtPayloadV>;
 
 export type MeResponse = JWTPayload;
-
-type TypeEquality<T, U> = keyof T extends keyof U
-  ? keyof U extends keyof T
-    ? true
-    : false
-  : false;
-type A = Pick<AuthInfo, keyof $Schema["typeDefs"]["AuthInfo"]["fields"]>;
-const _authAssert1: TypeEquality<JWTPayload, A> = true;
-const _authAssert2: TypeEquality<A, JWTPayload> = true;

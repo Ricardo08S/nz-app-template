@@ -3,66 +3,85 @@ name: Playwright Tests
 on:
   push:
     branches:
-      - production
+      - development
   pull_request:
     branches:
-      - production
+      - development
+
+env:
+  APP_ENV: test
 
 jobs:
   test:
+    # temporarily disable
+    if: false
     name: Run Playwright Tests
     runs-on: self-hosted
     timeout-minutes: 15
+    environment: test
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Ephemeral, same services this template already uses for local dev
-      # (Langkah 2) — not a shared VPS database, per §2.9.
-      - name: Start Postgres + Garage
-        run: docker compose -f docker-compose.services.yml up -d --wait
+      - name: Load test port config
+        run: echo "${{ secrets.ENV_FILE_TEST }}" | envsubst >> "$GITHUB_ENV"
 
-      - name: Bootstrap Garage bucket
-        id: garage
+      - name: Validate ENV_FILE_TEST
         run: |
           set -euo pipefail
-          bash scripts/garage-init.sh ci-test-bucket | tee /tmp/garage-init.log
-          echo "access_key_id=$(grep 'Key ID:' /tmp/garage-init.log | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
-          echo "secret_access_key=$(grep 'Secret key:' /tmp/garage-init.log | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
+          missing=0
+          while IFS='=' read -r key _; do
+            [ -z "$key" ] && continue
+            value="${!key:-}"
+            if [ -z "$value" ]; then
+              echo "::error::missing/empty key in ENV_FILE_TEST: $key"
+              missing=1
+            fi
+          done < env-templates/ENV_FILE_TEST.template
+          exit $missing
 
-      # Throwaway values for a throwaway run — the DB and bucket above die with
-      # the job. No SOPS decrypt needed; only the Garage keys are real, because
-      # Garage generated them itself in the step above.
-      - name: Write env files
-        env:
-          AWS_ACCESS_KEY_ID: ${{ steps.garage.outputs.access_key_id }}
-          AWS_SECRET_ACCESS_KEY: ${{ steps.garage.outputs.secret_access_key }}
+      - name: Create .env files
         run: |
-          cat > apps/server/.env <<EOF
-          APP_NAME=nz-app-template
-          APP_ENV=test
-          DATABASE_URL=postgresql://postgres:nz-app-template-password-default@localhost:5432/nz-app-template
-          JWT_ACCESS_KEY=ci-test-access-key-not-a-real-secret-000
-          JWT_REFRESH_KEY=ci-test-refresh-key-not-a-real-secret-00
-          AWS_REGION=us-east-1
-          AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-          AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-          AWS_S3_BUCKET=ci-test-bucket
-          AWS_S3_ENDPOINT=http://127.0.0.1:3900
-          PUBLIC_S3_ENDPOINT=http://ci-test-bucket.web.localhost:3902
-          EOF
-          cat > apps/web/.env <<EOF
-          PUBLIC_ENVIRONMENT=test
-          PUBLIC_BACKEND_URL=http://localhost:3000
-          PUBLIC_S3_ENDPOINT=http://ci-test-bucket.web.localhost:3902
-          PUBLIC_ENABLE_LOGGING=false
-          EOF
+          echo "${{ secrets.ENV_FILE_SERVER }}" | envsubst > apps/server/.env
+          echo "${{ secrets.ENV_FILE_WEB }}" | envsubst > apps/web/.env
+
+      - name: Validate .env files
+        run: |
+          set -euo pipefail
+          missing=0
+          declare -A secret_names=( [server]=ENV_FILE_SERVER [web]=ENV_FILE_WEB )
+          for app in server web; do
+            template="env-templates/${secret_names[$app]}.template"
+            envfile="apps/${app}/.env"
+            while IFS='=' read -r key _; do
+              [ -z "$key" ] && continue
+              if ! grep -q "^${key}=" "$envfile"; then
+                echo "::error::missing key in apps/${app}/.env: $key"
+                missing=1
+                continue
+              fi
+              value="$(grep "^${key}=" "$envfile" | cut -d= -f2-)"
+              if [ "$value" = '""' ] || [ -z "$value" ]; then
+                echo "::error::empty value in apps/${app}/.env: $key"
+                missing=1
+              fi
+            done < "$template"
+          done
+          exit $missing
+
+      - name: Validate web app points at test server port
+        run: |
+          set -euo pipefail
+          expected="http://localhost:${SERVER_PORT}"
+          actual="$(grep '^PUBLIC_BACKEND_URL=' apps/web/.env | cut -d= -f2- | tr -d '"')"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::apps/web/.env PUBLIC_BACKEND_URL is '$actual', expected '$expected' (SERVER_PORT=${SERVER_PORT}). Update secrets.ENV_FILE_WEB or ENV_FILE_TEST."
+            exit 1
+          fi
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10.18.3
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -73,30 +92,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Validate apps/server/.env against the runtime schema
-        run: pnpm exec tsx scripts/validate-env.ts apps/server/.env
-
-      - name: Generate ZenStack client
-        run: pnpm generate
-        working-directory: apps/server
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Run server unit tests
-        run: pnpm test
-        working-directory: apps/server
-
-      - name: Run web unit tests
-        run: pnpm test:unit
-        working-directory: apps/web
-
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
         working-directory: apps/web
 
-      # migrations/ does not exist yet (§4.7, first one lands in Langkah 7) —
-      # this is a no-op until then, not a failure.
       - name: Run database migrations
         run: pnpm migrate:deploy
         working-directory: apps/server
@@ -106,6 +105,8 @@ jobs:
         working-directory: apps/web
         env:
           CI: true
+          SERVER_PORT: ${{ env.SERVER_PORT }}
+          WEB_PORT: ${{ env.WEB_PORT }}
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

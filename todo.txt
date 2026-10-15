@@ -1,0 +1,1 @@
+- sveltekit should catch any error on toast

@@ -5,19 +5,28 @@
   "main": "index.js",
   "scripts": {
     "typecheck": "pnpm -r typecheck",
-    "dev": "pnpm run \"/^dev:.*/\"",
+    "dev": "pnpm run --no-bail \"/^dev:.*/\"",
+    "prod": "pnpm run --no-bail \"/^prod:.*/\"",
     "dev:server": "pnpm -F server dev",
     "dev:studio": "pnpm -F server db:studio",
-    "dev:web": "pnpm -F web dev"
+    "dev:web": "pnpm -F web dev",
+    "prod:server": "pnpm -F server dev:prod",
+    "prod:studio": "pnpm -F server db:studio:prod",
+    "prod:web": "pnpm -F web dev:prod"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.8.1",
+      "onFail": "download"
+    }
+  },
   "devDependencies": {
-    "dotenv": "17.4.2",
-    "tsx": "4.23.0",
-    "typescript": "6.0.3",
-    "zod": "4.4.3"
+    "@dotenvx/dotenvx": "2.21.0",
+    "typescript": "catalog:",
+    "zod": "catalog:"
   }
 }

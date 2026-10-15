@@ -1,8 +1,8 @@
 import { ZenStackClient } from "@zenstackhq/orm";
-import { schema } from "./zenstack/schema";
+import { schema } from "./zenstack/schema.js";
 import { PostgresDialect } from "kysely";
 import { Pool } from "pg";
-import { env } from "./env";
+import { env } from "./env.js";
 import { PolicyPlugin } from "@zenstackhq/plugin-policy";
 
 export const db = new ZenStackClient(schema, {

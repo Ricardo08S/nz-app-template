@@ -27,7 +27,18 @@ export const refresh = t.procedure
     }
 
     const { User: user } = refresh;
-    const tokens = await generateTokensFromUser(ctx, user);
+    const { accessToken, refreshToken } = await generateTokensFromUser(
+      ctx,
+      user,
+      payload.impersonation,
+    );
+    await db.refreshToken.delete({
+      where: {
+        id: payload.id,
+      },
+    });
 
-    return tokens;
+    log.info(`trpc.refresh`, { accessToken, refreshToken });
+
+    return { accessToken, refreshToken };
   });

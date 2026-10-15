@@ -1,8 +1,7 @@
-import { config as env } from "$lib/config";
+import { env } from "$env/dynamic/public";
 import type { CreateQueryResult } from "@tanstack/svelte-query";
 import { TRPCClientError } from "@trpc/client";
 import { customAlphabet } from "nanoid";
-import type { AppRouter } from "../../../server/src/router";
 import toast from "svelte-french-toast";
 export { toast };
 import * as z from "zod";
@@ -21,12 +20,8 @@ export const nanoid = customAlphabet(
   [...genCharArray("a", "z"), ...genCharArray("A", "Z"), ...genCharArray("0", "9")].join(""),
 );
 
-export function isTRPCClientError(cause: unknown): cause is TRPCClientError<AppRouter> {
+export function isTRPCClientError(cause: unknown): cause is TRPCClientError<any> {
   return cause instanceof TRPCClientError;
-}
-
-export function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message ? error.message : fallback;
 }
 
 const serverErrorV = z.object({
@@ -34,7 +29,7 @@ const serverErrorV = z.object({
   info: z.object({
     message: z.string(),
     stack: z.string().optional(),
-    details: z.unknown().optional(),
+    details: z.any().optional(),
   }),
 });
 export type ServerError = z.infer<typeof serverErrorV>;
@@ -45,6 +40,13 @@ export function isServerError(cause: unknown): cause is ServerError {
 export const getFileUrl = (key: string): string => {
   return `${env.PUBLIC_S3_ENDPOINT}/${key}`;
 };
+
+export function calculateDurationMonths(startDate: Date | string, endDate: Date | string): number {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+  return Math.max(1, months);
+}
 
 export { uploadFile, uploadFiles } from "./upload";
 

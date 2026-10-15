@@ -1,16 +1,11 @@
 #!/bin/sh
-# Writes /srv/config.js from PUBLIC_* env vars before Caddy starts, so one
-# image can serve any environment instead of baking values in at build time.
+# Rewrites SvelteKit's $env/dynamic/public module from this container's PUBLIC_*
+# env vars, so one image serves any environment (adapter-static would otherwise
+# freeze whatever was set at build time).
 set -eu
-
-cat > /srv/config.js <<EOF
-window.__APP_CONFIG__ = {
-  PUBLIC_BACKEND_URL: "${PUBLIC_BACKEND_URL:-}",
-  PUBLIC_S3_ENDPOINT: "${PUBLIC_S3_ENDPOINT:-}",
-  PUBLIC_ENVIRONMENT: "${PUBLIC_ENVIRONMENT:-}",
-  PUBLIC_ENABLE_LOGGING: "${PUBLIC_ENABLE_LOGGING:-false}",
-  PUBLIC_LOCALE: "${PUBLIC_LOCALE:-en-US}",
-};
-EOF
-
+env | awk -F= '/^PUBLIC_/ {
+  k = $1; v = substr($0, length(k) + 2)
+  gsub(/\\/, "\\\\", v); gsub(/"/, "\\\"", v)
+  out = out sep k ":\"" v "\""; sep = ","
+} END { print "export const env={" out "}" }' >/srv/_app/env.js
 exec "$@"

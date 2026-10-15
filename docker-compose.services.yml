@@ -1,51 +1,52 @@
+# Self-hosted Postgres + Silo (S3, MinIO fork: https://silo.pgsty.com) shared by
+# every app on this host. Secrets come from the gitignored root .env —
+# scripts/bootstrap.sh creates it. Ports are host-only; deployed containers
+# reach these over the `nz-app-template-services` network by container name.
 services:
   postgres:
     image: postgres:16-alpine
     container_name: nz-app-template-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nz-app-template-password-default}
-      POSTGRES_DB: ${POSTGRES_DB:-nz-app-template}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run scripts/bootstrap.sh first}
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - app-network
+      - services
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  garage:
-    image: dxflrs/garage:v2.3.0
-    container_name: nz-app-template-garage
+  silo:
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
+    container_name: nz-app-template-silo
     restart: unless-stopped
+    command: server /data --console-address ":9001"
     environment:
-      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      MINIO_ROOT_USER: ${SILO_ROOT_USER:-silo-admin}
+      MINIO_ROOT_PASSWORD: ${SILO_ROOT_PASSWORD:?run scripts/bootstrap.sh first}
     ports:
-      - "127.0.0.1:${GARAGE_S3_PORT:-3900}:3900"
-      - "127.0.0.1:${GARAGE_WEB_PORT:-3902}:3902"
+      - "127.0.0.1:${SILO_PORT:-9000}:9000"
+      - "127.0.0.1:${SILO_CONSOLE_PORT:-9001}:9001"
     volumes:
-      - ./deploy/garage.toml:/etc/garage.toml:ro
-      - garage_meta:/var/lib/garage/meta
-      - garage_data:/var/lib/garage/data
+      - silo_data:/data
     networks:
-      - app-network
+      - services
     healthcheck:
-      test: ["CMD", "/garage", "status"]
+      test: ["CMD", "mc", "ready", "local"]
       interval: 10s
       timeout: 5s
       retries: 5
 
 networks:
-  app-network:
+  services:
     name: nz-app-template-services
-    driver: bridge
 
 volumes:
   postgres_data:
-  garage_meta:
-  garage_data:
+  silo_data:

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { browser } from "$app/environment";
-  import { config as env } from "$lib/config";
+  import { env } from "$env/dynamic/public";
   import { toast } from "$lib";
   import favicon from "$lib/assets/favicon.svg";
   import { trpc } from "$lib/client.svelte";

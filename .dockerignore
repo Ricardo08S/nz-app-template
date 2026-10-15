@@ -46,3 +46,6 @@ README.md
 *.md
 .DS_Store
 Thumbs.db
+
+# Encrypted env + vars are for the deploy workflow, not the image
+deploy

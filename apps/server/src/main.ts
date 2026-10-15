@@ -1,15 +1,12 @@
 import "./prerun.js";
 import { ZenStackMiddleware } from "@zenstackhq/server/express";
 import { RPCApiHandler } from "@zenstackhq/server/api";
-import type { Request, Response } from "express";
 import { verifyAccessToken } from "./common.js";
 import { createContext, getClient } from "./context.js";
 import { env } from "./env.js";
-import { getReadiness, gitSha, isReady } from "./health.js";
 import { cors, express, trpcExpress } from "./lib.js";
-import { logError } from "./log.js";
-import { appRouter } from "./router.ts";
-import { schema } from "./zenstack/schema";
+import { appRouter } from "./router.js";
+import { schema } from "./zenstack/schema.js";
 
 (async () => {
   // express implementation
@@ -29,7 +26,7 @@ import { schema } from "./zenstack/schema";
       }
       return "";
     })();
-    console.log("<- ", req.method, req.path, JSON.parse(JSON.stringify(body)));
+    console.log("⬅️ ", req.method, req.path, JSON.parse(JSON.stringify(body)));
 
     next();
   });
@@ -42,7 +39,6 @@ import { schema } from "./zenstack/schema";
       onError: ({ error }) => {
         console.error(error.code, error.name, error.message);
         console.error(error.stack);
-        logError("tRPC Error", error);
       },
     }),
   );
@@ -65,7 +61,6 @@ import { schema } from "./zenstack/schema";
         log(level, message, error) {
           if (level === "error") {
             console.error(error);
-            logError(message, error);
           }
         },
       }),
@@ -81,32 +76,8 @@ import { schema } from "./zenstack/schema";
   app.get("/ping", (_req, res) => {
     res.send("pong");
   });
-
-  // live: process is up (Docker healthcheck). ready: can serve, polled by
-  // blue-green before switching. version: which build answers, checked after.
-  const liveHandler = (_req: Request, res: Response) => {
+  app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
-  };
-
-  app.get("/health/live", liveHandler);
-  // Kept for backwards compatibility with the old single endpoint.
-  app.get("/health", liveHandler);
-
-  app.get("/health/version", (_req, res) => {
-    res.json({
-      sha: gitSha(),
-      appName: env.APP_NAME,
-      appEnv: env.APP_ENV,
-    });
-  });
-
-  app.get("/health/ready", async (_req, res) => {
-    const checks = await getReadiness();
-    const ready = isReady(checks);
-    res.status(ready ? 200 : 503).json({
-      status: ready ? "ready" : "not_ready",
-      checks,
-    });
   });
 
   app.use((req, res, next) => {
@@ -117,31 +88,23 @@ import { schema } from "./zenstack/schema";
     });
   });
 
-  // Error handler middleware - must be defined after all routes. Express
-  // recognizes this as an error handler by its 4-parameter arity.
-  app.use(
-    (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-      console.error("Uncaught error:", err);
-      logError("Express Error", err);
+  // Error handler middleware - must be defined after all routes
+  app.use((err: any, _req: any, res: any, _next: any) => {
+    console.error("Uncaught error:", err);
 
-      const isErrorLike = (e: unknown): e is Record<string, unknown> =>
-        typeof e === "object" && e !== null;
-      const statusCode = (isErrorLike(err) && (err.statusCode ?? err.status)) || 500;
-      const message =
-        (isErrorLike(err) && typeof err.message === "string" && err.message) ||
-        "Internal server error";
+    const statusCode = err.statusCode || err.status || 500;
+    const message = err.message || "Internal server error";
 
-      res.status(Number(statusCode)).json({
-        error: {
-          message,
-          ...(env.VERBOSE && {
-            stack: isErrorLike(err) ? err.stack : undefined,
-            details: err,
-          }),
-        },
-      });
-    },
-  );
+    res.status(statusCode).json({
+      error: {
+        message,
+        ...(env.VERBOSE && {
+          stack: err.stack,
+          details: err,
+        }),
+      },
+    });
+  });
 
   app.listen(env.PORT, () => {
     console.log(`Listening on port ${env.PORT}...`);

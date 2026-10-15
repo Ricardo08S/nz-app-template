@@ -7,12 +7,9 @@
 
   const currentYear = new Date().getFullYear();
 
-  const quickLinks = [
-    { label: "Dashboard", href: resolve("/") },
-    { label: "Profile", href: resolve("/profile/") },
-  ];
+  const quickLinks = [{ label: "Home", href: resolve("/") }];
 
-  const resourceLinks: { label: string; href: string }[] = [];
+  const resourceLinks = [{ label: "Nafkhanzam Website", href: "https://www.nafkhanzam.com" }];
 </script>
 
 <footer class="bg-neutral">
@@ -36,7 +33,7 @@
     <nav class="md:col-span-2">
       <h6 class="footer-title">About</h6>
       <p class="max-w-md">
-        {brandName} — replace this placeholder name and description before shipping.
+        {brandName} is a nafkhanzam's template application. This footer needs to be updated.
       </p>
     </nav>
   </div>
@@ -46,12 +43,25 @@
     class="container mx-auto flex flex-col items-center justify-between gap-4 px-10 py-4 text-neutral-content md:flex-row"
   >
     <aside class="flex items-center gap-4">
-      <Icon icon="heroicons:cube" class="h-6 w-6" />
+      <Icon icon="heroicons:academic-cap" class="h-6 w-6" />
       <p>
         <span class="font-semibold">{brandName}</span>
         <br />
-        © {currentYear}. All rights reserved.
+        © {currentYear} All rights reserved.
       </p>
     </aside>
+    <nav>
+      <div class="flex gap-4">
+        <a
+          href="https://www.nafkhanzam.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="link link-hover"
+          aria-label="Nafkhanzam Website"
+        >
+          <Icon icon="heroicons:globe-alt" class="h-6 w-6" />
+        </a>
+      </div>
+    </nav>
   </div>
 </footer>

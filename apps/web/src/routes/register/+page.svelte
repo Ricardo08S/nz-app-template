@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { errorMessage, toast } from "$lib";
+  import { toast } from "$lib";
   import { trpc } from "$lib/client.svelte";
   import { token, refresh } from "$lib/stores/token.svelte";
   import { goto } from "$app/navigation";
@@ -37,8 +37,8 @@
       refresh.value = res.refreshToken;
       toast.success("Account created successfully!");
       goto("/");
-    } catch (error) {
-      toast.error(errorMessage(error, "Registration failed"));
+    } catch (error: any) {
+      toast.error(error.message || "Registration failed");
     } finally {
       isLoading = false;
     }

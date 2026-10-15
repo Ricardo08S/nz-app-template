@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { errorMessage, toast } from "$lib";
+  import { toast } from "$lib";
   import { token, refresh } from "$lib/stores/token.svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -28,8 +28,8 @@
       refresh.value = res.refreshToken;
       toast.success("Login successful!");
       goto(redirectTo);
-    } catch (error) {
-      toast.error(errorMessage(error, "Login failed"));
+    } catch (error: any) {
+      toast.error(error.message || "Login failed");
     } finally {
       isLoading = false;
     }
@@ -41,8 +41,8 @@
       const res = await trpc_.oidcInitiateLogin.query({ redirectUrl: redirectTo });
       // Redirect to OIDC provider's login page
       window.location.href = res.authUrl;
-    } catch (error) {
-      toast.error(errorMessage(error, "OIDC login failed"));
+    } catch (error: any) {
+      toast.error(error.message || "OIDC login failed");
       isOIDCLoading = false;
     }
   };
